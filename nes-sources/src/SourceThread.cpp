@@ -34,23 +34,28 @@
 #include <Time/Timestamp.hpp>
 #include <Util/Logger/Logger.hpp>
 #include <Util/ThreadNaming.hpp>
-#include <cpptrace/from_current.hpp>
 #include <fmt/format.h>
 #include <ErrorHandling.hpp>
 
-namespace NES
+namespace NES::Sources
 {
 
 SourceThread::SourceThread(
-    OriginId originId, std::shared_ptr<AbstractBufferProvider> poolProvider, std::unique_ptr<Source> sourceImplementation)
-    : originId(originId), localBufferManager(std::move(poolProvider)), sourceImplementation(std::move(sourceImplementation))
+    OriginId originId,
+    std::shared_ptr<Memory::AbstractPoolProvider> poolProvider,
+    size_t numOfLocalBuffers,
+    std::unique_ptr<Source> sourceImplementation)
+    : originId(originId)
+    , localBufferManager(std::move(poolProvider))
+    , numOfLocalBuffers(numOfLocalBuffers)
+    , sourceImplementation(std::move(sourceImplementation))
 {
     PRECONDITION(this->localBufferManager, "Invalid buffer manager");
 }
 
 namespace detail
 {
-void addBufferMetaData(OriginId originId, SequenceNumber sequenceNumber, TupleBuffer& buffer)
+void addBufferMetaData(OriginId originId, SequenceNumber sequenceNumber, Memory::TupleBuffer& buffer)
 {
     /// set the origin id for this source
     buffer.setOriginId(originId);
@@ -71,8 +76,7 @@ void addBufferMetaData(OriginId originId, SequenceNumber sequenceNumber, TupleBu
         buffer.isLastChunk());
 }
 
-using EmitFn = std::function<void(TupleBuffer, bool addBufferMetadata)>;
-
+using EmitFn = std::function<void(Memory::TupleBuffer, bool addBufferMetadata)>;
 void threadSetup(OriginId originId)
 {
     setThreadName(fmt::format("DataSrc-{}", originId));
@@ -82,7 +86,6 @@ void threadSetup(OriginId originId)
 struct SourceHandle
 {
     explicit SourceHandle(Source& source) : source(source) { source.open(); }
-
     SourceHandle(const SourceHandle& other) = delete;
     SourceHandle(SourceHandle&& other) noexcept = delete;
     SourceHandle& operator=(const SourceHandle& other) = delete;
@@ -91,21 +94,20 @@ struct SourceHandle
     ~SourceHandle()
     {
         /// Throwing in a destructor would terminate the application
-        CPPTRACE_TRY
+        try
         {
             source.close();
         }
-        CPPTRACE_CATCH(...)
+        catch (...)
         {
             tryLogCurrentException();
         }
     }
-
     Source& source; ///NOLINT Source handle should never outlive the source
 };
 
-SourceImplementationTermination
-dataSourceThreadRoutine(const std::stop_token& stopToken, Source& source, AbstractBufferProvider& bufferProvider, const EmitFn& emit)
+SourceImplementationTermination dataSourceThreadRoutine(
+    const std::stop_token& stopToken, Source& source, Memory::AbstractBufferProvider& bufferProvider, const EmitFn& emit)
 {
     const SourceHandle sourceHandle(source);
     while (!stopToken.stop_requested())
@@ -113,18 +115,17 @@ dataSourceThreadRoutine(const std::stop_token& stopToken, Source& source, Abstra
         /// 4 Things that could happen:
         /// 1. Happy Path: Source produces a tuple buffer and emit is called. The loop continues.
         /// 2. Stop was requested by the owner of the data source. Stop is propagated to the source implementation.
+        ///    fillTupleBuffer will return false, however this is not a EndOfStream, the source simply could not produce a buffer.
         ///    The thread exits with `StopRequested`
-        /// 3. EndOfStream was signaled by the source implementation. It returned 0 bytes, but the Stop Token was not triggered.
+        /// 3. EndOfStream was signaled by the source implementation. It returned false, but the Stop Token was not triggered.
         ///    The thread exits with `EndOfStream`
         /// 4. Failure. The fillTupleBuffer method will throw an exception, the exception is propagted to the SourceThread via the return promise.
         ///    The thread exists with an exception
         auto emptyBuffer = bufferProvider.getBufferBlocking();
-        const auto numReadBytes = source.fillTupleBuffer(emptyBuffer, stopToken);
+        auto numReadBytes = source.fillTupleBuffer(emptyBuffer, bufferProvider, stopToken);
 
         if (numReadBytes != 0)
         {
-            /// The source read in raw bytes, thus we don't know the number of tuples yet.
-            /// The InputFormatterTask expects that the source set the number of bytes this way and uses it to determine the number of tuples.
             emptyBuffer.setNumberOfTuples(numReadBytes);
             emit(emptyBuffer, true);
         }
@@ -142,40 +143,52 @@ dataSourceThreadRoutine(const std::stop_token& stopToken, Source& source, Abstra
     return {SourceImplementationTermination::StopRequested};
 }
 
+struct DestroyOnExit
+{
+    std::shared_ptr<Memory::AbstractBufferProvider> bufferProvider;
+    ~DestroyOnExit() { bufferProvider->destroy(); }
+};
+
 void dataSourceThread(
     const std::stop_token& stopToken,
     std::promise<SourceImplementationTermination> result,
     Source* source,
     SourceReturnType::EmitFunction emit,
-    const OriginId originId,
-    ///NOLINTNEXTLINE(performance-unnecessary-value-param) `jthread` does not allow references
-    std::shared_ptr<AbstractBufferProvider> bufferProvider)
+    OriginId originId,
+    std::optional<std::shared_ptr<Memory::AbstractBufferProvider>> bufferProvider)
 {
     threadSetup(originId);
+    if (!bufferProvider)
+    {
+        emit(originId, SourceReturnType::Error(BufferAllocationFailure()));
+        result.set_exception(std::make_exception_ptr(BufferAllocationFailure()));
+        return;
+    }
 
+    const DestroyOnExit onExit{bufferProvider.value()};
     size_t sequenceNumberGenerator = SequenceNumber::INITIAL;
-    const EmitFn dataEmit = [&](TupleBuffer&& buffer, bool shouldAddMetadata)
+    const EmitFn dataEmit = [&](Memory::TupleBuffer&& buffer, bool shouldAddMetadata)
     {
         if (shouldAddMetadata)
         {
             addBufferMetaData(originId, SequenceNumber(sequenceNumberGenerator++), buffer);
         }
-        emit(originId, SourceReturnType::Data{std::move(buffer)}, stopToken);
+        emit(originId, SourceReturnType::Data{std::move(buffer)});
     };
 
     try
     {
-        result.set_value_at_thread_exit(dataSourceThreadRoutine(stopToken, *source, *bufferProvider, dataEmit));
+        result.set_value_at_thread_exit(dataSourceThreadRoutine(stopToken, *source, **bufferProvider, dataEmit));
         if (!stopToken.stop_requested())
         {
-            emit(originId, SourceReturnType::EoS{}, stopToken);
+            emit(originId, SourceReturnType::EoS{});
         }
     }
     catch (const std::exception& e)
     {
         auto ingestionException = RunningRoutineFailure(e.what());
         result.set_exception_at_thread_exit(std::make_exception_ptr(ingestionException));
-        emit(originId, SourceReturnType::Error{std::move(ingestionException)}, stopToken);
+        emit(originId, SourceReturnType::Error{std::move(ingestionException)});
     }
 }
 }
@@ -198,7 +211,7 @@ bool SourceThread::start(SourceReturnType::EmitFunction&& emitFunction)
         sourceImplementation.get(),
         std::move(emitFunction),
         originId,
-        localBufferManager);
+        localBufferManager->createFixedSizeBufferPool(numOfLocalBuffers));
     thread = std::move(sourceThread);
     return true;
 }
@@ -258,6 +271,7 @@ std::ostream& operator<<(std::ostream& out, const SourceThread& sourceThread)
 {
     out << "\nSourceThread(";
     out << "\n  originId: " << sourceThread.originId;
+    out << "\n  numOfLocalBuffers: " << sourceThread.numOfLocalBuffers;
     out << "\n  source implementation:" << *sourceThread.sourceImplementation;
     out << ")\n";
     return out;

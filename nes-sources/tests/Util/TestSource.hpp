@@ -34,14 +34,12 @@
 #include <folly/MPMCQueue.h>
 #include <gtest/gtest.h>
 
-namespace NES
+namespace NES::Sources
 {
 
 class TestSourceControl
 {
 public:
-    static constexpr size_t DEFAULT_QUEUE_SIZE = 10;
-    static constexpr size_t RETRY_MULTIPLIER_MS = 10;
     bool injectEoS();
     bool injectData(std::vector<std::byte> data, size_t numberOfTuples);
     bool injectError(std::string error);
@@ -76,26 +74,24 @@ private:
     struct EoS
     {
     };
-
     struct Data
     {
         std::vector<std::byte> data;
         size_t numberOfTuples;
     };
-
     struct Error
     {
         std::string error;
     };
-
     using ControlData = std::variant<EoS, Data, Error>;
-    folly::MPMCQueue<ControlData> queue{DEFAULT_QUEUE_SIZE};
+    folly::MPMCQueue<ControlData> queue{10};
 };
 
 class TestSource : public Source
 {
 public:
-    size_t fillTupleBuffer(TupleBuffer& tupleBuffer, const std::stop_token& stopToken) override;
+    size_t fillTupleBuffer(
+        NES::Memory::TupleBuffer& tupleBuffer, Memory::AbstractBufferProvider& bufferProvider, const std::stop_token& stopToken) override;
     void open() override;
     void close() override;
 
@@ -112,6 +108,6 @@ private:
 };
 
 std::pair<std::unique_ptr<SourceHandle>, std::shared_ptr<TestSourceControl>>
-getTestSource(OriginId originId, std::shared_ptr<AbstractBufferProvider> bufferPool);
+getTestSource(OriginId originId, std::shared_ptr<Memory::AbstractPoolProvider> bufferPool);
 
 }
