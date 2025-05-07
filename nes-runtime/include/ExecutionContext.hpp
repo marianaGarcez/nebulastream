@@ -55,12 +55,13 @@ struct Arena
     /// 1. The required size is larger than the buffer provider's buffer size. In this case, we allocate an unpooled buffer.
     /// 2. The required size is larger than the last buffer size. In this case, we allocate a new buffer of fixed size.
     /// 3. The required size is smaller than the last buffer size. In this case, we return the pointer to the address in the last buffer.
-    std::span<std::byte> allocateMemory(size_t sizeInBytes);
+    int8_t* allocateMemory(size_t sizeInBytes);
 
     std::shared_ptr<AbstractBufferProvider> bufferProvider;
     std::vector<TupleBuffer> fixedSizeBuffers;
     std::vector<TupleBuffer> unpooledBuffers;
     size_t lastAllocationSize{0};
+    bool lastAllocationOwnsBuffer = false;
     size_t currentOffset{0};
 };
 
@@ -70,9 +71,9 @@ struct ArenaRef
     explicit ArenaRef(const nautilus::val<Arena*>& arenaRef) : arenaRef(arenaRef), availableSpaceForPointer(0), spacePointer(nullptr) { }
 
     /// Allocates memory from the arena. If the available space for the pointer is smaller than the required size, we allocate a new buffer from the arena.
-    nautilus::val<int8_t*> allocateMemory(const nautilus::val<size_t>& sizeInBytes);
+    std::pair<nautilus::val<int8_t*>, nautilus::val<bool>> allocateMemory(const nautilus::val<size_t>& sizeInBytes);
 
-    VariableSizedData allocateVariableSizedData(const nautilus::val<uint32_t>& sizeInBytes);
+    VariableSizedData allocateVariableSizedData(const nautilus::val<size_t>& sizeInBytes);
 
 private:
     nautilus::val<Arena*> arenaRef;

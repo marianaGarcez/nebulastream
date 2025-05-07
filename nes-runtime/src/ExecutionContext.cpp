@@ -45,15 +45,15 @@ AbstractBufferProvider* getBufferProviderProxy(const PipelineExecutionContext* p
 {
     return pipelineCtx->getBufferManager().get();
 }
-
 WorkerThreadId getWorkerThreadIdProxy(const PipelineExecutionContext* pec)
 {
     return pec->getId();
 }
 }
 
-std::span<std::byte> Arena::allocateMemory(const size_t sizeInBytes)
+int8_t* Arena::allocateMemory(const size_t sizeInBytes)
 {
+    lastAllocationOwnsBuffer = false;
     /// Case 1
     if (bufferProvider->getBufferSize() < sizeInBytes)
     {
@@ -64,15 +64,15 @@ std::span<std::byte> Arena::allocateMemory(const size_t sizeInBytes)
         }
         unpooledBuffers.emplace_back(unpooledBufferOpt.value());
         lastAllocationSize = sizeInBytes;
-        return unpooledBuffers.back().getAvailableMemoryArea().subspan(0, sizeInBytes);
+        lastAllocationOwnsBuffer = true;
+        return unpooledBuffers.back().getBuffer<int8_t>();
     }
 
     if (fixedSizeBuffers.empty())
     {
         fixedSizeBuffers.emplace_back(bufferProvider->getBufferBlocking());
         lastAllocationSize = bufferProvider->getBufferSize();
-        currentOffset += sizeInBytes;
-        return fixedSizeBuffers.back().getAvailableMemoryArea().subspan(0, sizeInBytes);
+        return fixedSizeBuffers.back().getBuffer();
     }
 
     /// Case 2
@@ -85,31 +85,40 @@ std::span<std::byte> Arena::allocateMemory(const size_t sizeInBytes)
     /// Case 3
     auto& lastBuffer = fixedSizeBuffers.back();
     lastAllocationSize = lastBuffer.getBufferSize();
-    const auto result = lastBuffer.getAvailableMemoryArea().subspan(currentOffset, sizeInBytes);
+    auto* const result = lastBuffer.getBuffer() + currentOffset;
     currentOffset += sizeInBytes;
     return result;
 }
-
-nautilus::val<int8_t*> ArenaRef::allocateMemory(const nautilus::val<size_t>& sizeInBytes)
+ 
+std::pair<nautilus::val<int8_t*>, nautilus::val<bool>> ArenaRef::allocateMemory(const nautilus::val<size_t>& sizeInBytes)
 {
+    nautilus::val<bool> ownsAllocation = false;
     /// If the available space for the pointer is smaller than the required size, we allocate a new buffer from the arena.
     /// We use the arena's allocateMemory function to allocate a new buffer and set the available space for the pointer to the last allocation size.
     /// Further, we set the space pointer to the beginning of the new buffer.
-    const auto currentArenaPtr = nautilus::invoke(
-        +[](Arena* arena, const size_t sizeInBytesVal) -> int8_t*
-        { return reinterpret_cast<int8_t*>(arena->allocateMemory(sizeInBytesVal).data()); },
-        arenaRef,
-        sizeInBytes);
-    return currentArenaPtr;
+    if (availableSpaceForPointer < sizeInBytes)
+    {
+        spacePointer = nautilus::invoke(
+            +[](Arena* arena, const size_t sizeInBytesVal) -> int8_t* { return arena->allocateMemory(sizeInBytesVal); },
+            arenaRef,
+            sizeInBytes);
+        availableSpaceForPointer
+            = Nautilus::Util::readValueFromMemRef<size_t>(Nautilus::Util::getMemberRef(arenaRef, &Arena::lastAllocationSize));
+        ownsAllocation
+            = Nautilus::Util::readValueFromMemRef<bool>(Nautilus::Util::getMemberRef(arenaRef, &Arena::lastAllocationOwnsBuffer));
+    }
+    availableSpaceForPointer -= sizeInBytes;
+    auto result = spacePointer;
+    spacePointer += sizeInBytes;
+    return {result, ownsAllocation};
 }
 
-VariableSizedData ArenaRef::allocateVariableSizedData(const nautilus::val<uint32_t>& sizeInBytes)
+VariableSizedData ArenaRef::allocateVariableSizedData(const nautilus::val<size_t>& sizeInBytes)
 {
-    auto basePtr = allocateMemory(sizeInBytes + nautilus::val<size_t>(4));
+    auto [basePtr, owns] = allocateMemory(sizeInBytes + nautilus::val<size_t>(4));
     *(static_cast<nautilus::val<uint32_t*>>(basePtr)) = sizeInBytes;
-    return VariableSizedData(basePtr, sizeInBytes);
+    return VariableSizedData(basePtr, sizeInBytes, VariableSizedData::Owned(owns));
 }
-
 ExecutionContext::ExecutionContext(const nautilus::val<PipelineExecutionContext*>& pipelineContext, const nautilus::val<Arena*>& arena)
     : pipelineContext(pipelineContext)
     , workerThreadId(nautilus::invoke(getWorkerThreadIdProxy, pipelineContext))
@@ -143,7 +152,7 @@ nautilus::val<TupleBuffer*> ExecutionContext::allocateBuffer() const
 
 nautilus::val<int8_t*> ExecutionContext::allocateMemory(const nautilus::val<size_t>& sizeInBytes)
 {
-    return pipelineMemoryProvider.arena.allocateMemory(sizeInBytes);
+    return pipelineMemoryProvider.arena.allocateMemory(sizeInBytes).first;
 }
 
 void emitBufferProxy(PipelineExecutionContext* pipelineCtx, TupleBuffer* tb)

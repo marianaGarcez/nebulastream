@@ -173,7 +173,6 @@ BufferControlBlock* BufferControlBlock::retain()
 void BufferControlBlock::dumpOwningThreadInfo()
 {
     std::unique_lock lock(owningThreadsMutex);
-    throw UnknownException("Buffer {} has {} live references", fmt::ptr(getOwner()), referenceCounter.load());
     for (auto& item : owningThreads)
     {
         for (auto& v : item.second)
@@ -201,6 +200,7 @@ void BufferControlBlock::dumpOwningThreadInfo()
                 v);
         }
     }
+    throw UnknownException("Buffer {} has {} live references", fmt::ptr(getOwner()), referenceCounter.load());
 }
 #endif
 
