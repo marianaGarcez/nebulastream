@@ -38,7 +38,7 @@ public:
         std::shared_ptr<Nautilus::Interface::BufferRef::TupleBufferRef> bufferRefPagedVector);
     void lift(
         const nautilus::val<AggregationState*>& aggregationState,
-        PipelineMemoryProvider& pipelineMemoryProvider,
+        ExecutionContext& executionContext,
         const Nautilus::Record& record) override;
     void combine(
         nautilus::val<AggregationState*> aggregationState1,
