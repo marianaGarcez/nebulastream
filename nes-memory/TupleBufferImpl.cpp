@@ -200,7 +200,6 @@ void BufferControlBlock::dumpOwningThreadInfo()
                 v);
         }
     }
-    throw UnknownException("Buffer {} has {} live references", fmt::ptr(getOwner()), referenceCounter.load());
 }
 #endif
 
