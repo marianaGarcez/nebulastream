@@ -87,10 +87,6 @@ SerializableVariantDescriptor descriptorConfigTypeToProto(const DescriptorConfig
             {
                 protoVar.mutable_function_list()->CopyFrom(arg);
             }
-            else if constexpr (std::is_same_v<U, ProjectionList>)
-            {
-                protoVar.mutable_projections()->CopyFrom(arg);
-            }
             else if constexpr (std::is_same_v<U, AggregationFunctionList>)
             {
                 protoVar.mutable_aggregation_function_list()->CopyFrom(arg);
@@ -99,9 +95,9 @@ SerializableVariantDescriptor descriptorConfigTypeToProto(const DescriptorConfig
             {
                 protoVar.mutable_window_infos()->CopyFrom(arg);
             }
-            else if constexpr (std::is_same_v<U, UInt64List>)
+            else if constexpr (std::is_same_v<U, SerializableModel>)
             {
-                protoVar.mutable_ulongs()->CopyFrom(arg);
+                protoVar.mutable_model()->CopyFrom(arg);
             }
             else
             {
@@ -140,14 +136,18 @@ DescriptorConfig::ConfigType protoToDescriptorConfigType(const SerializableVaria
             return protoVar.function_list();
         case SerializableVariantDescriptor::kAggregationFunctionList:
             return protoVar.aggregation_function_list();
-        case SerializableVariantDescriptor::kProjections:
-            return protoVar.projections();
         case SerializableVariantDescriptor::kWindowInfos:
             return protoVar.window_infos();
-        case SerializableVariantDescriptor::kUlongs:
-            return protoVar.ulongs();
-        case NES::SerializableVariantDescriptor::VALUE_NOT_SET:
-            throw CannotSerialize("Protobuf oneOf has no value");
+        case SerializableVariantDescriptor::kModel:
+            return protoVar.model();
+        default:
+            std::string protoVarAsJson;
+            /// Log proto variable as json, in exception, if possible.
+            if (const auto conversionResult = google::protobuf::json::MessageToJsonString(protoVar, &protoVarAsJson); conversionResult.ok())
+            {
+                throw CannotSerialize(fmt::format("Unknown variant type: {}", protoVarAsJson));
+            }
+            throw CannotSerialize("Unknown variant type.");
     }
 }
 

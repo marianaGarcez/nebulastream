@@ -252,6 +252,7 @@ int main(int argc, char** argv)
             return 0;
         }
 
+ 
 
         const std::string command = program.is_subcommand_used("register") ? "register" : "dump";
         auto input = program.at<argparse::ArgumentParser>(command).get("-i");

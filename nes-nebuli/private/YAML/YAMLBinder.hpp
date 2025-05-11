@@ -28,7 +28,7 @@
 #include <Sinks/SinkDescriptor.hpp>
 #include <Sources/LogicalSource.hpp>
 #include <Sources/SourceDescriptor.hpp>
-#include <experimental/propagate_const>
+#include <ModelCatalog.hpp>
 
 namespace NES::CLI
 {
@@ -67,33 +67,51 @@ struct PhysicalSource
     std::unordered_map<std::string, std::string> sourceConfig;
 };
 
+struct Model
+{
+    std::string name;
+    std::filesystem::path path;
+    std::vector<NES::DataType> inputs;
+    std::vector<SchemaField> outputs;
+};
+
 struct QueryConfig
 {
     std::string query;
     std::vector<Sink> sinks;
     std::vector<LogicalSource> logical;
     std::vector<PhysicalSource> physical;
+    std::vector<Model> models;
+};
+
+/// Validated and bound content of a YAML file, the members are not specific to the yaml-binder anymore but our "normal" types.
+/// If something goes wrong, for example, a source is declared twice, the binder will throw an exception.
+struct BoundQueryConfig
+{
+    LogicalPlan plan;
+    /// This should be changed to bound sinks once there is a sink catalog
+    std::unordered_map<std::string, std::shared_ptr<Sinks::SinkDescriptor>> sinks;
+    std::vector<NES::LogicalSource> logicalSources;
+    std::vector<SourceDescriptor> sourceDescriptors;
+    std::vector<Nebuli::Inference::ModelDescriptor> modelDescriptors;
 };
 
 class YAMLBinder
 {
-    std::experimental::propagate_const<std::shared_ptr<SourceCatalog>> sourceCatalog;
-    std::experimental::propagate_const<std::shared_ptr<SinkCatalog>> sinkCatalog;
+    std::shared_ptr<SourceCatalog> sourceCatalog;
+    std::shared_ptr<Nebuli::Inference::ModelCatalog> modelCatalog;
 
 public:
-    explicit YAMLBinder(std::shared_ptr<SourceCatalog> sourceCatalog, std::shared_ptr<SinkCatalog> sinkCatalog)
-        : sourceCatalog(std::move(sourceCatalog)), sinkCatalog(std::move(sinkCatalog))
+    explicit YAMLBinder(
+        const std::shared_ptr<SourceCatalog>& sourceCatalog, const std::shared_ptr<Nebuli::Inference::ModelCatalog>& modelCatalog)
+        : sourceCatalog(sourceCatalog), modelCatalog(modelCatalog)
     {
     }
 
-    LogicalPlan parseAndBind(std::istream& inputStream);
-
-    /// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
-    [[nodiscard]] Schema bindSchema(const std::vector<SchemaField>& attributeFields) const;
-    std::vector<NES::LogicalSource>
-    bindRegisterLogicalSources(const std::vector<LogicalSource>& unboundSources); /// required since it's not using CLI::LogicalSource
+    BoundQueryConfig parseAndBind(std::istream& inputStream);
+    std::vector<NES::LogicalSource> bindRegisterLogicalSources(const std::vector<LogicalSource>& unboundSources);
     std::vector<SourceDescriptor> bindRegisterPhysicalSources(const std::vector<PhysicalSource>& unboundSources);
-    std::vector<SinkDescriptor> bindRegisterSinks(const std::vector<Sink>& unboundSinks);
+    std::vector<Nebuli::Inference::ModelDescriptor> bindRegisterModels(const std::vector<Model>& vector);
 };
 
 }

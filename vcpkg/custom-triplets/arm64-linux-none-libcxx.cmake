@@ -12,9 +12,6 @@
 
 include(${CMAKE_CURRENT_LIST_DIR}/bits/arch/arm64.cmake)
 
-<<<<<<< HEAD
-set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE ${CMAKE_CURRENT_LIST_DIR}/toolchains/libcxx.cmake)
-=======
 # boost-context does not recognize arm64
 if (PORT STREQUAL "boost-context")
     SET(VCPKG_CMAKE_CONFIGURE_OPTIONS -DCMAKE_SYSTEM_PROCESSOR=aarch64)
@@ -23,4 +20,4 @@ endif ()
 if (PORT STREQUAL "libpng")
     SET(VCPKG_CMAKE_CONFIGURE_OPTIONS -DCMAKE_SYSTEM_PROCESSOR=aarch64)
 endif ()
->>>>>>> 033c3aa2ce (feat(ImageManip): ImageManip Functions)
+set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE ${CMAKE_CURRENT_LIST_DIR}/toolchains/libcxx.cmake)

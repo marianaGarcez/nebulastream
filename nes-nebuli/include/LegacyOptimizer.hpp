@@ -12,10 +12,9 @@
     limitations under the License.
 */
 
-#pragma once
+﻿#pragma once
 #include <memory>
 #include <utility>
-
 #include <Plans/LogicalPlan.hpp>
 
 namespace NES

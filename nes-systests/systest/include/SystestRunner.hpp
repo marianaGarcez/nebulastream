@@ -30,6 +30,7 @@
 #include <Sources/SourceCatalog.hpp>
 #include <Sources/SourceDescriptor.hpp>
 #include <nlohmann/json_fwd.hpp>
+#include <ModelCatalog.hpp>
 #include <SingleNodeWorkerConfiguration.hpp>
 #include <SystestState.hpp>
 
@@ -40,6 +41,17 @@ struct SystestQuery;
 struct RunningQuery;
 class QuerySubmitter;
 
+struct LoadedQueryPlan
+{
+    std::expected<LogicalPlan, Exception> queryPlan;
+    std::shared_ptr<SourceCatalog> sourceCatalog;
+    std::shared_ptr<Nebuli::Inference::ModelCatalog> modelCatalog;
+    std::string queryName;
+    Schema sinkSchema;
+    SystestQueryId queryIdInTest;
+    std::unordered_map<SourceDescriptor, std::optional<SourceInputFile>> sourcesToFilePaths;
+    std::optional<ExpectedError> expectedError;
+};
 /// Pad size of (PASSED / FAILED) in the console output of the systest to have a nicely looking output
 static constexpr auto padSizeSuccess = 120;
 /// We pad to a maximum of 3 digits ---> maximum value that is correctly padded is 99 queries per file

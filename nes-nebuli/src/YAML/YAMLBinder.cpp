@@ -104,6 +104,20 @@ struct convert<NES::CLI::PhysicalSource>
 };
 
 template <>
+struct convert<NES::CLI::Model>
+{
+    static bool decode(const Node& node, NES::CLI::Model& rhs)
+    {
+        rhs.name = node["name"].as<std::string>();
+        rhs.inputs
+            = node["inputs"].as<std::vector<std::string>>() | std::views::transform(stringToFieldType) | std::ranges::to<std::vector>();
+        rhs.outputs = node["outputs"].as<std::vector<NES::CLI::SchemaField>>();
+        rhs.path = node["path"].as<std::string>();
+        return true;
+    }
+};
+
+template <>
 struct convert<NES::CLI::QueryConfig>
 {
     static bool decode(const Node& node, NES::CLI::QueryConfig& rhs)
@@ -112,6 +126,10 @@ struct convert<NES::CLI::QueryConfig>
         rhs.logical = node["logical"].as<std::vector<NES::CLI::LogicalSource>>();
         rhs.physical = node["physical"].as<std::vector<NES::CLI::PhysicalSource>>();
         rhs.query = node["query"].as<std::string>();
+        if (node["models"].IsDefined())
+        {
+            rhs.models = node["models"].as<std::vector<NES::CLI::Model>>();
+        }
         return true;
     }
 };
@@ -183,31 +201,61 @@ std::vector<SourceDescriptor> CLI::YAMLBinder::bindRegisterPhysicalSources(const
     return boundSources;
 }
 
-std::vector<SinkDescriptor> CLI::YAMLBinder::bindRegisterSinks(const std::vector<Sink>& unboundSinks)
+std::vector<Nebuli::Inference::ModelDescriptor> YAMLBinder::bindRegisterModels(const std::vector<Model>& unboundModels)
 {
-    std::vector<SinkDescriptor> boundSinks{};
-    for (const auto& [sinkName, schemaFields, sinkType, sinkConfig] : unboundSinks)
-    {
-        auto schema = bindSchema(schemaFields);
-        NES_DEBUG("Adding sink: {} of type {}", sinkName, sinkType);
-        if (auto sinkDescriptor = sinkCatalog->addSinkDescriptor(sinkName, schema, sinkType, sinkConfig); sinkDescriptor.has_value())
-        {
-            boundSinks.push_back(sinkDescriptor.value());
-        }
-    }
-    return boundSinks;
+    auto boundModels = unboundModels
+        | std::views::transform(
+                           [](const auto& model)
+                           {
+                               Schema schema{};
+                               for (auto [name, type] : model.outputs)
+                               {
+                                   schema.addField(name, type);
+                               }
+                               return Nebuli::Inference::ModelDescriptor{model.name, model.path, model.inputs, schema};
+                           })
+        | std::ranges::to<std::vector>();
+    std::ranges::for_each(boundModels, [&](const auto& model) { modelCatalog->registerModel(model); });
+    return boundModels;
 }
 
-LogicalPlan CLI::YAMLBinder::parseAndBind(std::istream& inputStream)
+BoundQueryConfig YAMLBinder::parseAndBind(std::istream& inputStream)
 {
+    BoundQueryConfig config{};
+    auto& [plan, sinks, logicalSources, physicalSources, models] = config;
     try
     {
-        auto [queryString, unboundSinks, unboundLogicalSources, unboundPhysicalSources] = YAML::Load(inputStream).as<QueryConfig>();
-        bindRegisterLogicalSources(unboundLogicalSources);
-        bindRegisterPhysicalSources(unboundPhysicalSources);
-        bindRegisterSinks(unboundSinks);
-        auto plan = AntlrSQLQueryParser::createLogicalQueryPlanFromSQLString(queryString);
-        return plan;
+        auto [queryString, unboundSinks, unboundLogicalSources, unboundPhysicalSources, unboundModels]
+            = YAML::Load(inputStream).as<QueryConfig>();
+        plan = AntlrSQLQueryParser::createLogicalQueryPlanFromSQLString(queryString);
+        const auto sinkOperators = plan.rootOperators;
+        if (sinkOperators.size() != 1)
+        {
+            throw QueryInvalid(
+                "NebulaStream currently only supports a single sink per query, but the query contains: {}", sinkOperators.size());
+        }
+        auto sinkOperator = sinkOperators.at(0).tryGet<SinkLogicalOperator>();
+        INVARIANT(sinkOperator.has_value(), "Root operator in plan was not sink");
+
+        if (const auto foundSink = unboundSinks.find(sinkOperator->sinkName); foundSink != unboundSinks.end())
+        {
+            auto validatedSinkConfig = Sinks::SinkDescriptor::validateAndFormatConfig(foundSink->second.type, foundSink->second.config);
+            auto sinkDescriptor = std::make_shared<Sinks::SinkDescriptor>(foundSink->second.type, std::move(validatedSinkConfig), false);
+            sinkOperator->sinkDescriptor = sinkDescriptor;
+            sinks = std::unordered_map{std::make_pair(foundSink->second.name, sinkDescriptor)};
+        }
+        else
+        {
+            throw UnknownSinkType(
+                "Sinkname {} not specified in the configuration {}",
+                sinkOperator->sinkName,
+                fmt::join(std::ranges::views::keys(sinks), ","));
+        }
+        plan.rootOperators.at(0) = *sinkOperator;
+        logicalSources = bindRegisterLogicalSources(unboundLogicalSources);
+        physicalSources = bindRegisterPhysicalSources(unboundPhysicalSources);
+        models = bindRegisterModels(unboundModels);
+        return config;
     }
     catch (const YAML::ParserException& pex)
     {

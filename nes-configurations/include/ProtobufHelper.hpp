@@ -26,11 +26,7 @@ inline std::ostream& operator<<(std::ostream& os, const FunctionList& list)
     return os;
 }
 
-inline std::ostream& operator<<(std::ostream& os, const ProjectionList& list)
-{
-    os << list.DebugString();
-    return os;
-}
+ 
 
 inline std::ostream& operator<<(std::ostream& os, const AggregationFunctionList& list)
 {
@@ -50,9 +46,11 @@ inline std::ostream& operator<<(std::ostream& os, const SerializableFunction& fu
     return os;
 }
 
-inline std::ostream& operator<<(std::ostream& os, const UInt64List& descriptor)
+
+inline std::ostream& operator<<(std::ostream& os, const SerializableModel& model)
 {
-    return os << descriptor.DebugString();
+    os << model.DebugString();
+    return os;
 }
 
 inline bool operator==(const FunctionList& lhs, const FunctionList& rhs)
@@ -79,16 +77,9 @@ inline bool operator==(const SerializableFunction& lhs, const SerializableFuncti
     return lhs.SerializeAsString() == rhs.SerializeAsString();
 }
 
-inline bool operator==(const ProjectionList& lhs, const ProjectionList& rhs)
+inline bool operator==(const SerializableModel& lhs, const SerializableModel& rhs)
 {
     /// Compare by serializing to string.
     return lhs.SerializeAsString() == rhs.SerializeAsString();
 }
-
-inline bool operator==(const UInt64List& lhs, const UInt64List& rhs)
-{
-    return lhs.SerializeAsString() == rhs.SerializeAsString();
-}
-
-
 }

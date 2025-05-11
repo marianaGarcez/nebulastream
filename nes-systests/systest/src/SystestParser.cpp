@@ -59,6 +59,9 @@ namespace NES::Systest
 {
 
 static constexpr auto CreateToken = "CREATE"s;
+static constexpr auto SystestLogicalSourceToken = "Source"s;
+static constexpr auto AttachSourceToken = "Attach"s;
+static constexpr auto ModelToken = "MODEL"sv;
 static constexpr auto QueryToken = "SELECT"s;
 static constexpr auto ResultDelimiter = "----"s;
 static constexpr auto ErrorToken = "ERROR"s;
@@ -67,6 +70,8 @@ static constexpr auto DifferentialToken = "===="s;
 static const std::array stringToToken = std::to_array<std::pair<std::string_view, TokenType>>(
     {{CreateToken, TokenType::CREATE},
      {QueryToken, TokenType::QUERY},
+     {SinkToken, TokenType::SINK},
+     {ModelToken, TokenType::MODEL},
      {ResultDelimiter, TokenType::RESULT_DELIMITER},
      {ErrorToken, TokenType::ERROR_EXPECTATION},
      {DifferentialToken, TokenType::DIFFERENTIAL}});
@@ -119,6 +124,26 @@ void SystestParser::registerOnResultTuplesCallback(ResultTuplesCallback callback
     this->onResultTuplesCallback = std::move(callback);
 }
 
+void SystestParser::registerOnSystestLogicalSourceCallback(SystestLogicalSourceCallback callback)
+{
+    this->onSystestLogicalSourceCallback = std::move(callback);
+}
+void SystestParser::registerOnSystestAttachSourceCallback(SystestAttachSourceCallback callback)
+{
+    this->onAttachSourceCallback = std::move(callback);
+}
+
+void SystestParser::registerOnModelCallback(ModelCallback callback)
+{
+    this->onModelCallback = std::move(callback);
+}
+
+void SystestParser::registerOnSystestSinkCallback(SystestSinkCallback callback)
+{
+    this->onSystestSinkCallback = std::move(callback);
+}
+
+ 
 void SystestParser::registerOnErrorExpectationCallback(ErrorExpectationCallback callback)
 {
     this->onErrorExpectationCallback = std::move(callback);
@@ -145,6 +170,40 @@ void SystestParser::parse()
             case TokenType::CREATE: {
                 auto [query, testData] = expectCreateStatement();
                 onCreateCallback(query, testData);
+            case TokenType::ATTACH_SOURCE: {
+                if (onAttachSourceCallback)
+                {
+                    onAttachSourceCallback(expectAttachSource());
+                }
+                break;
+            }
+            case TokenType::MODEL: {
+                auto model = expectModel();
+                if (onModelCallback)
+                {
+                    onModelCallback(std::move(model));
+                }
+                break;
+            }
+            case TokenType::LOGICAL_SOURCE: {
+                auto [logicalSource, attachSourceOpt] = expectSystestLogicalSource();
+                if (onSystestLogicalSourceCallback)
+                {
+                    onSystestLogicalSourceCallback(logicalSource);
+                }
+                if (onAttachSourceCallback and attachSourceOpt.has_value())
+                {
+                    onAttachSourceCallback(std::move(attachSourceOpt.value()));
+                }
+                break;
+            }
+            case TokenType::SINK: {
+                auto sink = expectSink();
+                if (onSystestSinkCallback)
+                {
+                    onSystestSinkCallback(std::move(sink));
+                }
+ 
                 break;
             }
             case TokenType::QUERY: {
@@ -287,6 +346,226 @@ std::optional<TokenType> SystestParser::peekToken() const
 
     INVARIANT(!line.empty(), "a potential token should never be empty");
     return getTokenIfValid(line);
+    INVARIANT(!potentialToken.empty(), "a potential token should never be empty");
+    return getTokenIfValid(potentialToken);
+}
+
+SystestParser::SystestSink SystestParser::expectSink() const
+{
+    INVARIANT(currentLine < lines.size(), "current parse line should exist");
+
+    SystestSink sink;
+    const auto& line = lines[currentLine];
+    std::istringstream lineAsStream(line);
+
+    /// Read and discard the first word as it is always Source
+    std::string discard;
+    if (!(lineAsStream >> discard))
+    {
+        throw SLTUnexpectedToken("failed to read the first word in: {}", line);
+    }
+    INVARIANT(
+        Util::toLowerCase(discard) == Util::toLowerCase(SinkToken),
+        "Expected first word to be `{}` for sink statement",
+        SystestLogicalSourceToken);
+
+    /// Read the source name and check if successful
+    if (!(lineAsStream >> sink.name))
+    {
+        throw SLTUnexpectedToken("failed to read sink name in {}", line);
+    }
+
+    std::vector<std::string> arguments;
+    std::string argument;
+    while (lineAsStream >> argument)
+    {
+        arguments.push_back(argument);
+    }
+
+    /// After the source definition line we expect schema fields
+    sink.fields = parseSchemaFields(arguments);
+
+    return sink;
+}
+
+Nebuli::Inference::ModelDescriptor SystestParser::expectModel()
+{
+    try
+    {
+        if (lines.size() < currentLine + 2)
+        {
+            throw SLTUnexpectedToken("expected at least three lines for model definition.");
+        }
+
+        Nebuli::Inference::ModelDescriptor model;
+        auto& modelNameLine = lines[currentLine];
+        auto _ = moveToNextToken();
+        auto& inputLine = lines[currentLine];
+        _ = moveToNextToken();
+        auto& outputLine = lines[currentLine];
+
+        std::istringstream stream(modelNameLine);
+        std::string discard;
+        if (!(stream >> discard))
+        {
+            throw SLTUnexpectedToken("failed to read the first word in: {}", modelNameLine);
+        }
+        if (!(stream >> model.name))
+        {
+            throw SLTUnexpectedToken("failed to read model name in {}", modelNameLine);
+        }
+
+        if (!(stream >> model.path))
+        {
+            throw SLTUnexpectedToken("failed to read model path in {}", modelNameLine);
+        }
+
+        auto inputTypeNames = NES::Util::splitWithStringDelimiter<std::string>(inputLine, " ");
+        auto types = std::views::transform(inputTypeNames, [](const auto& typeName) { return DataTypeProvider::provideDataType(typeName); })
+            | std::ranges::to<std::vector>();
+        model.inputs = types;
+
+        auto outputSchema = NES::Util::splitWithStringDelimiter<std::string>(outputLine, " ");
+
+        for (auto [type, name] : parseSchemaFields(outputSchema))
+        {
+            model.outputs.addField(name, type);
+        }
+        return model;
+    }
+    catch (Exception& e)
+    {
+        auto modelParserSchema = "MODEL <model_name> <model_path>"
+                                 "<type-0> ... <type-N>"
+                                 "<type-0> <output-name-0> ... <type-N> <output-name-N>"sv;
+        e.what() += fmt::format("\nWhen Parsing a Model Statement:\n{}", modelParserSchema);
+        throw;
+    }
+}
+
+std::pair<SystestParser::SystestLogicalSource, std::optional<SystestAttachSource>> SystestParser::expectSystestLogicalSource()
+{
+    INVARIANT(currentLine < lines.size(), "current parse line should exist");
+
+    SystestLogicalSource source;
+    auto& line = lines[currentLine];
+    const auto attachSourceTokens = NES::Util::splitWithStringDelimiter<std::string>(line, " ");
+
+    /// Read and discard the first word as it is always Source
+    if (attachSourceTokens.front() != SystestLogicalSourceToken)
+    {
+        throw SLTUnexpectedToken("failed to read the first word in: {}", line);
+    }
+
+    /// Read the source name and check if successful
+    if (attachSourceTokens.size() <= 1)
+    {
+        throw SLTUnexpectedToken("failed to read source name in {}", line);
+    }
+    source.name = attachSourceTokens.at(1);
+
+    if (const auto dataIngestionType = magic_enum::enum_cast<NES::TestDataIngestionType>(NES::Util::toUpperCase(attachSourceTokens.back())))
+    {
+        const std::vector<std::string> arguments = attachSourceTokens | std::views::drop(2)
+            | std::views::take(std::ranges::size(attachSourceTokens) - 3) | std::ranges::to<std::vector<std::string>>();
+
+        /// After the source definition line we expect schema fields
+        source.fields = parseSchemaFields(arguments);
+        seenLogicalSourceNames.emplace(source.name);
+
+        const auto attachSource = [&]()
+        {
+            switch (dataIngestionType.value())
+            {
+                case TestDataIngestionType::INLINE: {
+                    ++currentLine; /// proceed to results
+                    return SystestAttachSource{
+                        .sourceType = "File",
+                        .sourceConfigurationPath = std::filesystem::path(TEST_CONFIGURATION_DIR) / "sources/file_default.yaml",
+                        .inputFormatterType = "CSV",
+                        .inputFormatterConfigurationPath
+                        = std::filesystem::path(TEST_CONFIGURATION_DIR) / "inputFormatters/csv_default.yaml",
+                        .logicalSourceName = source.name,
+                        .testDataIngestionType = dataIngestionType.value(),
+                        .tuples = expectTuples(false),
+                        .fileDataPath = {},
+                        .serverThreads = nullptr};
+                }
+                case TestDataIngestionType::FILE: {
+                    return SystestAttachSource{
+                        .sourceType = "File",
+                        .sourceConfigurationPath = std::filesystem::path(TEST_CONFIGURATION_DIR) / "sources/file_default.yaml",
+                        .inputFormatterType = "CSV",
+                        .inputFormatterConfigurationPath
+                        = std::filesystem::path(TEST_CONFIGURATION_DIR) / "inputFormatters/csv_default.yaml",
+                        .logicalSourceName = source.name,
+                        .testDataIngestionType = dataIngestionType.value(),
+                        .tuples = {},
+                        .fileDataPath = expectFilePath(),
+                        .serverThreads = nullptr};
+                }
+                case TestDataIngestionType::GENERATOR: {
+                    return SystestAttachSource{
+                        .sourceType = "Generator",
+                        .sourceConfigurationPath = expectFilePath(),
+                        .inputFormatterType = "CSV",
+                        .inputFormatterConfigurationPath
+                        = std::filesystem::path(TEST_CONFIGURATION_DIR) / "inputFormatters/csv_default.yaml",
+                        .logicalSourceName = source.name,
+                        .testDataIngestionType = dataIngestionType.value(),
+                        .tuples = {},
+                        .fileDataPath = {},
+                        .serverThreads = nullptr};
+                }
+            }
+            std::unreachable();
+        }();
+        return std::make_pair(source, attachSource);
+    }
+    const std::vector<std::string> arguments = attachSourceTokens | std::views::drop(2) | std::ranges::to<std::vector<std::string>>();
+
+    /// After the source definition line we expect schema fields
+    source.fields = parseSchemaFields(arguments);
+    seenLogicalSourceNames.emplace(source.name);
+
+    return std::make_pair(source, std::nullopt);
+}
+
+/// Attach SOURCE_TYPE LOGICAL_SOURCE_NAME DATA_SOURCE_TYPE
+/// Attach SOURCE_TYPE SOURCE_CONFIG_PATH LOGICAL_SOURCE_NAME DATA_SOURCE_TYPE
+SystestAttachSource SystestParser::expectAttachSource()
+{
+    INVARIANT(currentLine < lines.size(), "current parse line should exist");
+
+    switch (auto attachSource = validateAttachSource(seenLogicalSourceNames, lines[currentLine]); attachSource.testDataIngestionType)
+    {
+        case TestDataIngestionType::INLINE: {
+            attachSource.tuples = {expectTuples(true)};
+            return attachSource;
+        }
+        case TestDataIngestionType::FILE: {
+            attachSource.fileDataPath = {expectFilePath()};
+            return attachSource;
+        }
+        case TestDataIngestionType::GENERATOR: {
+            attachSource.sourceConfigurationPath = {expectFilePath()};
+            return attachSource;
+        }
+    }
+    std::unreachable();
+}
+
+std::filesystem::path SystestParser::expectFilePath()
+{
+    ++currentLine;
+    INVARIANT(currentLine < lines.size(), "current line to parse should exist");
+    if (const auto parsedFilePath = std::filesystem::path(lines.at(currentLine));
+        std::filesystem::exists(parsedFilePath) and parsedFilePath.has_filename())
+    {
+        return parsedFilePath;
+    }
+    throw TestException("Attach source with FileData must be followed by valid file path, but got: {}", lines.at(currentLine));
+>>>>>>> df25c19ee3 (feat(Inference): Adds Inference Support)
 }
 
 std::vector<std::string> SystestParser::expectTuples(const bool ignoreFirst)

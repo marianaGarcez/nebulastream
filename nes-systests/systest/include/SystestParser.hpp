@@ -29,6 +29,7 @@
 #include <fmt/format.h>
 #include <magic_enum/magic_enum.hpp>
 #include <ErrorHandling.hpp>
+#include <ModelCatalog.hpp>
 #include <SystestState.hpp>
 
 namespace NES::Systest
@@ -38,6 +39,11 @@ using namespace std::literals;
 /// Tokens ///
 enum class TokenType : uint8_t
 {
+    INVALID,
+    LOGICAL_SOURCE,
+    ATTACH_SOURCE,
+    MODEL,
+    SINK,
     QUERY,
     CREATE,
     RESULT_DELIMITER,
@@ -147,7 +153,11 @@ public:
 
     using QueryCallback = std::function<void(std::string, SystestQueryId)>;
     using ResultTuplesCallback = std::function<void(std::vector<std::string>&&, SystestQueryId correspondingQueryId)>;
-    using ErrorExpectationCallback = std::function<void(const ErrorExpectation&, SystestQueryId correspondingQueryId)>;
+    using SystestLogicalSourceCallback = std::function<void(const SystestLogicalSource&)>;
+    using SystestAttachSourceCallback = std::function<void(SystestAttachSource attachSource)>;
+    using ModelCallback = std::function<void(Nebuli::Inference::ModelDescriptor&&)>;
+    using SystestSinkCallback = std::function<void(SystestSink&&)>;
+    using ErrorExpectationCallback = std::function<void(const ErrorExpectation&)>;
     using DifferentialQueryBlockCallback
         = std::function<void(std::string, std::string, SystestQueryId correspondingQueryId, SystestQueryId diffQueryId)>;
     using CreateCallback = std::function<void(std::string, std::optional<std::pair<TestDataIngestionType, std::vector<std::string>>>)>;
@@ -155,6 +165,10 @@ public:
     /// Register callbacks to be called when the respective section is parsed
     void registerOnQueryCallback(QueryCallback callback);
     void registerOnResultTuplesCallback(ResultTuplesCallback callback);
+    void registerOnSystestLogicalSourceCallback(SystestLogicalSourceCallback callback);
+    void registerOnModelCallback(ModelCallback callback);
+    void registerOnSystestAttachSourceCallback(SystestAttachSourceCallback callback);
+    void registerOnSystestSinkCallback(SystestSinkCallback callback);
     void registerOnErrorExpectationCallback(ErrorExpectationCallback callback);
     void registerOnCreateCallback(CreateCallback callback);
     void registerOnDifferentialQueryBlockCallback(DifferentialQueryBlockCallback callback);
@@ -172,6 +186,10 @@ private:
     /// Look ahead at the next token without consuming it
     [[nodiscard]] std::optional<TokenType> peekToken() const;
 
+    [[nodiscard]] std::pair<SystestLogicalSource, std::optional<SystestAttachSource>> expectSystestLogicalSource();
+    [[nodiscard]] SystestAttachSource expectAttachSource();
+    [[nodiscard]] Nebuli::Inference::ModelDescriptor expectModel();
+    [[nodiscard]] SystestSink expectSink() const;
     [[nodiscard]] std::vector<std::string> expectTuples(bool ignoreFirst);
     [[nodiscard]] std::filesystem::path expectFilePath();
     [[nodiscard]] std::string expectQuery();
@@ -182,6 +200,11 @@ private:
 
     QueryCallback onQueryCallback;
     ResultTuplesCallback onResultTuplesCallback;
+    ModelCallback onModelCallback;
+    SystestLogicalSourceCallback onSystestLogicalSourceCallback;
+    SystestAttachSourceCallback onAttachSourceCallback;
+    SystestSinkCallback onSystestSinkCallback;
+>>>>>>> df25c19ee3 (feat(Inference): Adds Inference Support)
     ErrorExpectationCallback onErrorExpectationCallback;
     CreateCallback onCreateCallback;
     DifferentialQueryBlockCallback onDifferentialQueryBlockCallback;
