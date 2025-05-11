@@ -209,10 +209,17 @@ RewriteRuleResultSubgraph LowerToPhysicalWindowedAggregation::apply(LogicalOpera
         pageSize,
         numberOfBuckets);
 
-    auto sliceAndWindowStore
-        = std::make_unique<DefaultTimeBasedSliceStore>(windowType->getSize().getTime(), windowType->getSlide().getTime());
+<<<<<<< HEAD
+    auto sliceAndWindowStore = std::make_unique<DefaultTimeBasedSliceStore>(
+        windowType->getSize().getTime(), windowType->getSlide().getTime(), inputOriginIds.size());
     auto handler = std::make_shared<AggregationOperatorHandler>(
-        inputOriginIds | std::ranges::to<std::vector>(), outputOriginId, std::move(sliceAndWindowStore), conf.maxNumberOfBuckets);
+        inputOriginIds, outputOriginId, std::move(sliceAndWindowStore), aggregation.requiresSequentialAggregation());
+=======
+    auto sliceAndWindowStore = std::make_unique<DefaultTimeBasedSliceStore>(
+        windowType->getSize().getTime(), windowType->getSlide().getTime(), inputOriginIds.size());
+    auto handler = std::make_shared<AggregationOperatorHandler>(
+        inputOriginIds, outputOriginId, std::move(sliceAndWindowStore), aggregation.requiresSequentialAggregation());
+>>>>>>> 9b4602a850 (feat(Windowing): Sequential processing)
     auto build = AggregationBuildPhysicalOperator(handlerId, std::move(timeFunction), aggregationPhysicalFunctions, hashMapOptions);
     auto probe = AggregationProbePhysicalOperator(hashMapOptions, aggregationPhysicalFunctions, handlerId, windowMetaData);
 
