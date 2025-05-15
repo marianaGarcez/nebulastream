@@ -12,10 +12,9 @@
     limitations under the License.
 */
 
-#pragma once
+﻿#pragma once
 #include <SinksParsing/Format.hpp>
 
-#include <cstddef>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -40,16 +39,15 @@ public:
         std::vector<DataType> physicalTypes;
     };
 
-    explicit JSONFormat(const Schema& schema);
+    explicit JSONFormat(Schema schema);
 
     /// Return formatted content of TupleBuffer, contains timestamp if specified in config.
-    [[nodiscard]] std::string getFormattedBuffer(const TupleBuffer& inputBuffer) const override;
+    [[nodiscard]] std::string getFormattedBuffer(const Memory::TupleBuffer& inputBuffer) const override;
 
     /// Reads a TupleBuffer and uses the supplied 'schema' to format it to JSON. Returns result as a string.
-    static std::string tupleBufferToFormattedJSONString(TupleBuffer tbuffer, const FormattingContext& formattingContext);
+    static std::string tupleBufferToFormattedJSONString(Memory::TupleBuffer tbuffer, const FormattingContext& formattingContext);
 
     std::ostream& toString(std::ostream& os) const override { return os << *this; }
-
     friend std::ostream& operator<<(std::ostream& out, const JSONFormat& format);
 
 private:

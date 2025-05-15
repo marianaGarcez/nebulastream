@@ -16,16 +16,15 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <iostream>
+#include <memory>
 #include <ranges>
 #include <span>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <DataTypes/Schema.hpp>
 #include <MemoryLayout/MemoryLayout.hpp>
-#include <MemoryLayout/VariableSizedAccess.hpp>
 #include <Runtime/TupleBuffer.hpp>
-#include <SinksParsing/Format.hpp>
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 #include <ErrorHandling.hpp>
@@ -33,7 +32,7 @@
 namespace NES
 {
 
-JSONFormat::JSONFormat(const Schema& pSchema) : Format(pSchema)
+JSONFormat::JSONFormat(Schema pSchema) : Format(std::move(pSchema))
 {
     PRECONDITION(schema.getNumberOfFields() != 0, "Formatter expected a non-empty schema");
     size_t offset = 0;
@@ -48,32 +47,33 @@ JSONFormat::JSONFormat(const Schema& pSchema) : Format(pSchema)
     formattingContext.schemaSizeInBytes = schema.getSizeOfSchemaInBytes();
 }
 
-std::string JSONFormat::getFormattedBuffer(const TupleBuffer& inputBuffer) const
+std::string JSONFormat::getFormattedBuffer(const Memory::TupleBuffer& inputBuffer) const
 {
     return tupleBufferToFormattedJSONString(inputBuffer, formattingContext);
 }
 
-std::string JSONFormat::tupleBufferToFormattedJSONString(TupleBuffer tbuffer, const FormattingContext& formattingContext)
+std::string JSONFormat::tupleBufferToFormattedJSONString(Memory::TupleBuffer tbuffer, const FormattingContext& formattingContext)
 {
     std::stringstream ss;
     const auto numberOfTuples = tbuffer.getNumberOfTuples();
-    const auto buffer = tbuffer.getAvailableMemoryArea().subspan(0, numberOfTuples * formattingContext.schemaSizeInBytes);
+    auto buffer = std::span(tbuffer.getBuffer<char>(), numberOfTuples * formattingContext.schemaSizeInBytes);
     for (size_t i = 0; i < numberOfTuples; i++)
     {
         auto tuple = buffer.subspan(i * formattingContext.schemaSizeInBytes, formattingContext.schemaSizeInBytes);
         auto fields
             = std::views::iota(static_cast<size_t>(0), formattingContext.offsets.size())
             | std::views::transform(
-                  [&formattingContext, &tuple, &tbuffer](const auto& index)
+                  [&](const auto& index)
                   {
                       auto type = formattingContext.physicalTypes[index];
                       auto offset = formattingContext.offsets[index];
                       if (type.type == DataType::Type::VARSIZED)
                       {
-                          const VariableSizedAccess variableSizedAccess{
-                              *std::bit_cast<const uint64_t*>(&tuple[formattingContext.offsets[index]])};
-                          const auto varSizedData = MemoryLayout::readVarSizedDataAsString(tbuffer, variableSizedAccess);
-                          return fmt::format(R"("{}":"{}")", formattingContext.names.at(index), varSizedData);
+                          auto childIdx = *std::bit_cast<const uint32_t*>(&tuple[offset]);
+                          return fmt::format(
+                              R"("{}":"{}")",
+                              formattingContext.names.at(index),
+                              Memory::MemoryLayouts::readVarSizedData(tbuffer, childIdx));
                       }
                       return fmt::format("\"{}\":{}", formattingContext.names.at(index), type.formattedBytesToString(&tuple[offset]));
                   });

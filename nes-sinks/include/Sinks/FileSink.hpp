@@ -61,6 +61,7 @@ private:
     std::string outputFilePath;
     bool isAppend;
     bool isOpen;
+    /// Todo #417: support abstract/arbitrary formatter
     std::unique_ptr<Format> formatter;
     folly::Synchronized<std::ofstream> outputFileStream;
 };
