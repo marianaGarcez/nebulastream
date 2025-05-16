@@ -62,19 +62,14 @@ jobs:
     uses: ./.github/workflows/endless-mode.yml
     with:
       dev_image_tag: ${{ needs.get-dev-images.outputs.image-tag }}
-      head_sha: ${{ github.event.pull_request.head.sha }}
+      ref: ${{ github.event.pull_request.head.ref }}
 
-  test-nebuli-and-single-node-worker:
-    needs: [ get-dev-images, smoke-tests ]
-    name: "E2E Test using Nebuli and SingleNodeWorker"
-    uses: ./.github/workflows/execute_query.yml
+  branch-release-image:
+    needs: [ get-dev-images ]
+    name: "Branch docker images"
+    secrets: inherit
+    uses: ./.github/workflows/create_release_image.yml
     with:
-      head_sha: ${{ github.event.pull_request.head.sha }}
-      dev_image_tag: ${{ needs.get-dev-images.outputs.image-tag }}
-      runtime_seconds: '$((1*60))'
-
-  nix-build:
-    name: "Run Nix Build"
-    uses: ./.github/workflows/nix-build.yml
-    with:
-      head_sha: ${{ github.event.pull_request.head.sha }}
+      ref: ${{ github.head_ref }}
+      dockerhub-tag: ${{ github.head_ref }}
+      dev_image_tag: ${{needs.get-dev-images.outputs.image-tag}}
