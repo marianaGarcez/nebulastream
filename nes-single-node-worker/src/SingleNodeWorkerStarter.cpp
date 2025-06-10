@@ -34,7 +34,6 @@ namespace
 /// the shutdownBarrier to be released by the signal handler and then shuts the grpc server down, which unblocks the `Wait` call
 /// in the main function.
 std::binary_semaphore shutdownBarrier{0};
-
 void signalHandler(int signal)
 {
     NES_INFO("Received signal {}. Shutting down.", signal);
@@ -54,6 +53,9 @@ std::jthread shutdownHook(grpc::Server& server)
 
 int main(const int argc, const char* argv[])
 {
+    signal(SIGINT, signalHandler);
+    signal(SIGTERM, signalHandler);
+
     CPPTRACE_TRY
     {
         NES::Logger::setupLogging("singleNodeWorker.log", NES::LogLevel::LOG_DEBUG);
