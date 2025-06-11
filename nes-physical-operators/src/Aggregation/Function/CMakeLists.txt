@@ -20,4 +20,5 @@ add_plugin(Array_Agg AggregationPhysicalFunction nes-physical-operators ArrayAgg
 
 add_source_files(nes-physical-operators
         AggregationPhysicalFunction.cpp
+        TemporalSequenceAggregationFunction.cpp
 )
