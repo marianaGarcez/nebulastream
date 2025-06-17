@@ -291,7 +291,7 @@ timeUnit: MS
 
 timestampParameter: name=identifier;
 
-functionName:  IDENTIFIER | AVG | MAX | MIN | SUM | COUNT | MEDIAN | ARRAY_AGG;
+functionName:  IDENTIFIER | AVG | MAX | MIN | SUM | COUNT | MEDIAN | ARRAY_AGG | VAR;
 
 sinkClause: INTO sink (',' sink)*;
 
@@ -475,6 +475,7 @@ AVG: 'AVG' | 'avg';
 SUM: 'SUM' | 'sum';
 COUNT: 'COUNT' | 'count';
 MEDIAN: 'MEDIAN' | 'median';
+VAR: 'VAR' | 'var';
 WATERMARK: 'WATERMARK' | 'watermark';
 OFFSET: 'OFFSET' | 'offset';
 LOCALHOST: 'LOCALHOST' | 'localhost';

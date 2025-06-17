@@ -56,6 +56,7 @@
 #include <Operators/Windows/Aggregations/MedianAggregationLogicalFunction.hpp>
 #include <Operators/Windows/Aggregations/MinAggregationLogicalFunction.hpp>
 #include <Operators/Windows/Aggregations/SumAggregationLogicalFunction.hpp>
+#include <Operators/Windows/Aggregations/VarAggregationLogicalFunction.hpp>
 #include <Operators/Windows/JoinLogicalOperator.hpp>
 #include <Plans/LogicalPlan.hpp>
 #include <Plans/LogicalPlanBuilder.hpp>
@@ -939,6 +940,10 @@ void AntlrSQLQueryPlanCreator::exitFunctionCall(AntlrSQLParser::FunctionCallCont
         case AntlrSQLLexer::ARRAY_AGG:
             helpers.top().windowAggs.push_back(
                 ArrayAggregationLogicalFunction::create(helpers.top().functionBuilder.back().get<FieldAccessLogicalFunction>()));
+            break;
+        case AntlrSQLLexer::VAR:
+            parentHelper.windowAggs.push_back(
+                VarAggregationLogicalFunction::create(helper.functionBuilder.back().get<FieldAccessLogicalFunction>()));
             break;
         default:
             /// Check if the function is a constructor for a datatype
