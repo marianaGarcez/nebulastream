@@ -666,7 +666,6 @@ std::filesystem::path SystestParser::expectFilePath()
         return parsedFilePath;
     }
     throw TestException("Attach source with FileData must be followed by valid file path, but got: {}", lines.at(currentLine));
->>>>>>> df25c19ee3 (feat(Inference): Adds Inference Support)
 }
 
 std::vector<std::string> SystestParser::expectTuples(const bool ignoreFirst)

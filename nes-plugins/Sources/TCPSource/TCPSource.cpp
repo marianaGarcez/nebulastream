@@ -46,8 +46,10 @@
 #include <SourceRegistry.hpp>
 #include <SourceValidationRegistry.hpp>
 #include <TCPDataServer.hpp>
+#include "GeneratorDataRegistry.hpp"
 
-namespace NES
+
+namespace NES::Sources
 {
 
 TCPSource::TCPSource(const SourceDescriptor& sourceDescriptor)
@@ -340,5 +342,11 @@ FileDataRegistryReturnType FileDataGeneratedRegistrar::RegisterTCPFileData(FileD
 
     return systestAdaptorArguments.physicalSourceConfig;
 }
+
+///NOLINTNEXTLINE (performance-unnecessary-value-param)
+GeneratorDataRegistryReturnType
+GeneratorDataGeneratedRegistrar::RegisterTCPGeneratorData(GeneratorDataRegistryArguments systestAdaptorArguments)
+{
     return systestAdaptorArguments.physicalSourceConfig;
+}
 }
