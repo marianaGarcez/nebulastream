@@ -52,7 +52,108 @@ bool emptyOrComment(const std::string& line)
         || line.find_first_not_of(" \t\n\r\f\v") == std::string::npos /// only whitespaces
         || line.starts_with('#'); /// slt comment
 }
+std::optional<std::filesystem::path> validateYamlConfigPath(const std::string_view filePath)
+{
+    const std::filesystem::path path(filePath);
+    if (not std::filesystem::exists(path) or not std::filesystem::is_regular_file(path) or not path.has_extension())
+    {
+        return std::nullopt;
+    }
 
+    const std::string ext = NES::Util::toLowerCase(path.extension().string());
+    return (ext == ".yaml" or ext == ".yml") ? std::optional{path} : std::nullopt;
+}
+
+NES::SystestAttachSource validateAttachSource(const std::unordered_set<std::string>& seenLogicalSourceNames, const std::string& line)
+{
+    const auto attachSourceTokens = NES::Util::splitWithStringDelimiter<std::string>(line, " ");
+    /// Attach SourceType (SourceConfig) IFormatter (IFormatterConfig) LogicalSourceName DataIngestionType
+    constexpr size_t minNumberOfTokensInAttachSource = 5;
+    constexpr size_t maxNumberOfTokensInAttachSource = 7;
+
+    /// Preliminary checks
+    if (attachSourceTokens.size() < minNumberOfTokensInAttachSource or attachSourceTokens.size() > maxNumberOfTokensInAttachSource)
+    {
+        throw NES::SLTUnexpectedToken(
+            "Expected between {} and {} tokens for attach source, but found {} tokens in \"{}\"",
+            minNumberOfTokensInAttachSource,
+            maxNumberOfTokensInAttachSource,
+            attachSourceTokens.size(),
+            fmt::join(attachSourceTokens, ", "));
+    }
+    if (NES::Util::toUpperCase(attachSourceTokens.front()) != "ATTACH")
+    {
+        throw NES::SLTUnexpectedToken("Expected first token of attach source to be 'ATTACH'");
+    }
+
+    /// Validate and parse tokens
+    size_t nextTokenIdx = 1;
+    NES::SystestAttachSource attachSource{};
+    if (not NES::Sources::SourceProvider::contains(attachSourceTokens.at(nextTokenIdx)))
+    {
+        throw NES::SLTUnexpectedToken(
+            "Expected second token of attach source to be valid source type, but was: {}", attachSourceTokens.at(1));
+    }
+
+    attachSource.sourceType = std::string(attachSourceTokens.at(nextTokenIdx++));
+
+    attachSource.sourceConfigurationPath
+        = [](const std::vector<std::string>& attachSourceTokens, const std::string_view sourceType, size_t& nextTokenIdx)
+    {
+        if (const auto sourceConfigPath = validateYamlConfigPath(attachSourceTokens.at(nextTokenIdx)))
+        {
+            ++nextTokenIdx;
+            return sourceConfigPath.value();
+        }
+        /// Set default source config path
+        return std::filesystem::path(TEST_CONFIGURATION_DIR) / fmt::format("sources/{}_default.yaml", NES::Util::toLowerCase(sourceType));
+    }(attachSourceTokens, attachSource.sourceType, nextTokenIdx);
+
+    if (not(NES::Util::toLowerCase(attachSourceTokens.at(nextTokenIdx)) == "raw"
+            || NES::InputFormatters::InputFormatterProvider::contains(attachSourceTokens.at(nextTokenIdx))))
+    {
+        throw NES::SLTUnexpectedToken(
+            "Expected token after source config to be a valid input formatter, but was: {}", attachSourceTokens.at(nextTokenIdx));
+    }
+
+    attachSource.inputFormatterType = attachSourceTokens.at(nextTokenIdx++);
+
+    attachSource.inputFormatterConfigurationPath
+        = [](const std::vector<std::string>& attachSourceTokens, const std::string_view inputFormatterType, size_t& nextTokenIdx)
+    {
+        if (const auto inputFormatterConfigPath = validateYamlConfigPath(attachSourceTokens.at(nextTokenIdx)))
+        {
+            ++nextTokenIdx;
+            return inputFormatterConfigPath.value();
+        }
+        /// Set default source config path
+        return std::filesystem::path(TEST_CONFIGURATION_DIR)
+            / fmt::format("inputFormatters/{}_default.yaml", NES::Util::toLowerCase(inputFormatterType));
+    }(attachSourceTokens, attachSource.inputFormatterType, nextTokenIdx);
+
+    if (not seenLogicalSourceNames.contains(attachSourceTokens.at(nextTokenIdx)))
+    {
+        throw NES::SLTUnexpectedToken(
+            "Expected second to last token of attach source to be an existing logical source name, but was: {}",
+            attachSourceTokens.at(nextTokenIdx));
+    }
+    attachSource.logicalSourceName = attachSourceTokens.at(nextTokenIdx++);
+
+    if (not magic_enum::enum_cast<NES::TestDataIngestionType>(NES::Util::toUpperCase(attachSourceTokens.at(nextTokenIdx))))
+    {
+        throw NES::SLTUnexpectedToken(
+            "Last keyword of attach source must be a valid TestDataIngestionType, but was: {}", attachSourceTokens.at(nextTokenIdx));
+    }
+    attachSource.testDataIngestionType
+        = magic_enum::enum_cast<NES::TestDataIngestionType>(NES::Util::toUpperCase(attachSourceTokens.at(nextTokenIdx++))).value();
+
+    if (nextTokenIdx != attachSourceTokens.size())
+    {
+        throw NES::SLTUnexpectedToken(
+            "Number of parsed tokens {} does not match number of input tokens {}", nextTokenIdx, attachSourceTokens.size());
+    }
+    return attachSource;
+}
 }
 
 namespace NES::Systest
