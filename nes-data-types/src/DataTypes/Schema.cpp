@@ -114,11 +114,7 @@ std::optional<Schema::Field> Schema::getFieldByName(const std::string& fieldName
         NES_WARNING("Schema: field with name {} does not exist", fieldName);
         return std::nullopt;
     }
-    if (matchingFields.size() > 1)
-    {
-        NES_WARNING("Ambiguous field name {}. Returning first found field {}", fieldName, matchingFields.front());
-    }
-    return matchingFields.front();
+    return std::nullopt;
 }
 
 Schema::Field Schema::getFieldAt(const size_t index) const
