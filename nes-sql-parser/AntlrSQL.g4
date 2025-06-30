@@ -291,7 +291,11 @@ timeUnit: MS
 
 timestampParameter: name=identifier;
 
+<<<<<<< HEAD
 functionName:  IDENTIFIER | AVG | MAX | MIN | SUM | COUNT | MEDIAN | ARRAY_AGG | VAR;
+=======
+functionName:  IDENTIFIER | AVG | MAX | MIN | SUM | COUNT | MEDIAN | VAR | TEMPORAL_SEQUENCE;
+>>>>>>> 8dd6330071 (add sketch of trajectory aggregation)
 
 sinkClause: INTO sink (',' sink)*;
 
@@ -476,6 +480,7 @@ SUM: 'SUM' | 'sum';
 COUNT: 'COUNT' | 'count';
 MEDIAN: 'MEDIAN' | 'median';
 VAR: 'VAR' | 'var';
+TEMPORAL_SEQUENCE: 'TEMPORAL_SEQUENCE' | 'temporal_sequence';
 WATERMARK: 'WATERMARK' | 'watermark';
 OFFSET: 'OFFSET' | 'offset';
 LOCALHOST: 'LOCALHOST' | 'localhost';

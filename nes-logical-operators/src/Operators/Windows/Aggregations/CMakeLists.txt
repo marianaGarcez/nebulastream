@@ -22,3 +22,4 @@ add_plugin(Min AggregationLogicalFunction nes-logical-operators MinAggregationLo
 add_plugin(Sum AggregationLogicalFunction nes-logical-operators SumAggregationLogicalFunction.cpp)
 add_plugin(Array_Agg AggregationLogicalFunction nes-logical-operators ArrayAggregationLogicalFunction.cpp)
 add_plugin(Var AggregationLogicalFunction nes-logical-operators VarAggregationLogicalFunction.cpp)
+add_plugin(TemporalSequence AggregationLogicalFunction nes-logical-operators TemporalSequenceAggregationLogicalFunction.cpp)
