@@ -24,16 +24,9 @@
 #include <Aggregation/AggregationBuildPhysicalOperator.hpp>
 #include <Aggregation/AggregationOperatorHandler.hpp>
 #include <Aggregation/AggregationProbePhysicalOperator.hpp>
-#include <Aggregation/Function/AggregationFunction.hpp>
-#include <Aggregation/Function/AvgAggregationFunction.hpp>
-#include <Aggregation/Function/CountAggregationFunction.hpp>
-#include <Aggregation/Function/MaxAggregationFunction.hpp>
-#include <Aggregation/Function/MedianAggregationFunction.hpp>
-#include <Aggregation/Function/MinAggregationFunction.hpp>
-#include <Aggregation/Function/SumAggregationFunction.hpp>
+#include <Aggregation/Function/AggregationPhysicalFunction.hpp>
 #include <Aggregation/Function/TemporalSequenceAggregationPhysicalFunction.hpp>
 #include <Aggregation/Function/VarAggregationFunction.hpp>
-#include <Aggregation/WindowAggregation.hpp>
 #include <Operators/Windows/Aggregations/TemporalSequenceAggregationLogicalFunction.hpp>
 #include <Configurations/Worker/QueryOptimizerConfiguration.hpp>
 #include <DataTypes/DataTypeProvider.hpp>
@@ -118,15 +111,10 @@ static std::unique_ptr<TimeFunction> getTimeFunction(const WindowedAggregationLo
 
 namespace
 {
-<<<<<<< HEAD
-std::vector<std::shared_ptr<AggregationPhysicalFunction>>
-getAggregationPhysicalFunctions(const WindowedAggregationLogicalOperator& logicalOperator, const QueryExecutionConfiguration& configuration)
-=======
-std::vector<std::shared_ptr<AggregationFunction>> getAggregationPhysicalFunctions(
+std::vector<std::shared_ptr<AggregationPhysicalFunction>> getAggregationPhysicalFunctions(
     const WindowedAggregationLogicalOperator& logicalOperator, const NES::Configurations::QueryOptimizerConfiguration& configuration)
->>>>>>> ca234dadf0 (Add Var operation)
 {
-    std::vector<std::shared_ptr<AggregationFunction>> aggregationPhysicalFunctions;
+    std::vector<std::shared_ptr<AggregationPhysicalFunction>> aggregationPhysicalFunctions;
     const auto& aggregationDescriptors = logicalOperator.getWindowAggregation();
     for (const auto& descriptor : aggregationDescriptors)
     {
@@ -152,41 +140,6 @@ std::vector<std::shared_ptr<AggregationFunction>> getAggregationPhysicalFunction
         }
         else if (name == "TemporalSequence")
         {
-            // For MEOS trajectory aggregation, we need the longitude, latitude, and timestamp functions
-            const auto* temporalSequenceDescriptor = dynamic_cast<const TemporalSequenceAggregationLogicalFunction*>(descriptor.get());
-            INVARIANT(temporalSequenceDescriptor != nullptr, "TemporalSequence descriptor cast failed");
-
-            // Get physical functions for longitude, latitude, and timestamp
-            auto lonPhysicalFunction = QueryCompilation::FunctionProvider::lowerFunction(temporalSequenceDescriptor->getLongitudeFunction());
-            auto latPhysicalFunction = QueryCompilation::FunctionProvider::lowerFunction(temporalSequenceDescriptor->getLatitudeFunction());
-            auto timestampPhysicalFunction = QueryCompilation::FunctionProvider::lowerFunction(temporalSequenceDescriptor->getTimestampFunction());
-
-            // VARSIZED type for trajectory output
-            auto varsizedType = DataTypeProvider::provideDataType(DataType::Type::VARSIZED);
-
-            aggregationPhysicalFunctions.emplace_back(std::make_shared<TemporalSequenceAggregationFunction>(
-                std::move(varsizedType),
-                std::move(physicalFinalType),
-                std::move(aggregationInputFunction),
-                resultFieldIdentifier,
-                std::move(lonPhysicalFunction),
-                std::move(latPhysicalFunction),
-                std::move(timestampPhysicalFunction),
-                std::move(memoryProvider)));
-        }
-        else if (name == "Var")
-        {
-            /// We assume that the count is a u64
-            auto countType = DataTypeProvider::provideDataType(DataType::Type::UINT64);
-            aggregationPhysicalFunctions.emplace_back(std::make_shared<VarAggregationFunction>(
-                std::move(physicalInputType),
-                std::move(physicalFinalType),
-                std::move(aggregationInputFunction),
-                resultFieldIdentifier,
-                std::move(countType)));
-        }
-        else if (name == "TemporalSequence")
-        {
             // Cast to get access to the specific TemporalSequence fields
             auto* temporalSeqDescriptor = dynamic_cast<const TemporalSequenceAggregationLogicalFunction*>(descriptor.get());
             PRECONDITION(temporalSeqDescriptor, "Expected TemporalSequenceAggregationLogicalFunction but got different type");
@@ -202,7 +155,7 @@ std::vector<std::shared_ptr<AggregationFunction>> getAggregationPhysicalFunction
             // Create memory layout and provider for PagedVector
             auto layout = std::make_shared<Memory::MemoryLayouts::ColumnLayout>(
                 NES::Configurations::DEFAULT_PAGED_VECTOR_SIZE, logicalOperator.getInputSchemas()[0]);
-            auto memoryProvider = std::make_unique<ColumnTupleBufferMemoryProvider>(layout);
+            auto memoryProvider = std::make_unique<Nautilus::Interface::MemoryProvider::ColumnTupleBufferMemoryProvider>(layout);
             
             aggregationPhysicalFunctions.emplace_back(std::make_shared<TemporalSequenceAggregationPhysicalFunction>(
                 std::move(varsizedType),       // Input type (VARSIZED for trajectory state)
@@ -210,6 +163,17 @@ std::vector<std::shared_ptr<AggregationFunction>> getAggregationPhysicalFunction
                 std::move(aggregationInputFunction), // Primary input function
                 resultFieldIdentifier,
                 std::move(memoryProvider)));
+        }
+        else if (name == "Var")
+        {
+            /// We assume that the count is a u64
+            auto countType = DataTypeProvider::provideDataType(DataType::Type::UINT64);
+            aggregationPhysicalFunctions.emplace_back(std::make_shared<VarAggregationFunction>(
+                std::move(physicalInputType),
+                std::move(physicalFinalType),
+                std::move(aggregationInputFunction),
+                resultFieldIdentifier,
+                std::move(countType)));
         }
         else
         {
@@ -286,17 +250,10 @@ RewriteRuleResultSubgraph LowerToPhysicalWindowedAggregation::apply(LogicalOpera
         pageSize,
         numberOfBuckets);
 
-<<<<<<< HEAD
     auto sliceAndWindowStore = std::make_unique<DefaultTimeBasedSliceStore>(
         windowType->getSize().getTime(), windowType->getSlide().getTime(), inputOriginIds.size());
     auto handler = std::make_shared<AggregationOperatorHandler>(
         inputOriginIds, outputOriginId, std::move(sliceAndWindowStore), aggregation.requiresSequentialAggregation());
-=======
-    auto sliceAndWindowStore = std::make_unique<DefaultTimeBasedSliceStore>(
-        windowType->getSize().getTime(), windowType->getSlide().getTime(), inputOriginIds.size());
-    auto handler = std::make_shared<AggregationOperatorHandler>(
-        inputOriginIds, outputOriginId, std::move(sliceAndWindowStore), aggregation.requiresSequentialAggregation());
->>>>>>> 9b4602a850 (feat(Windowing): Sequential processing)
     auto build = AggregationBuildPhysicalOperator(handlerId, std::move(timeFunction), aggregationPhysicalFunctions, hashMapOptions);
     auto probe = AggregationProbePhysicalOperator(hashMapOptions, aggregationPhysicalFunctions, handlerId, windowMetaData);
 

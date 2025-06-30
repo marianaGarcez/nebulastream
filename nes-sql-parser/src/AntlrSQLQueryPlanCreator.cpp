@@ -943,19 +943,23 @@ void AntlrSQLQueryPlanCreator::exitFunctionCall(AntlrSQLParser::FunctionCallCont
                 ArrayAggregationLogicalFunction::create(helpers.top().functionBuilder.back().get<FieldAccessLogicalFunction>()));
             break;
         case AntlrSQLLexer::VAR:
-            parentHelper.windowAggs.push_back(
-                VarAggregationLogicalFunction::create(helper.functionBuilder.back().get<FieldAccessLogicalFunction>()));
+            if (helpers.top().functionBuilder.empty())
+            {
+                throw InvalidQuerySyntax("Aggregation requires argument at {}", context->getText());
+            }
+            helpers.top().windowAggs.push_back(
+                VarAggregationLogicalFunction::create(helpers.top().functionBuilder.back().get<FieldAccessLogicalFunction>()));
             break;
         case AntlrSQLLexer::TEMPORAL_SEQUENCE:
-            INVARIANT(helper.functionBuilder.size() == 3, "TEMPORAL_SEQUENCE requires three arguments (longitude, latitude, timestamp), but got {}", helper.functionBuilder.size());
+            INVARIANT(helpers.top().functionBuilder.size() == 3, "TEMPORAL_SEQUENCE requires three arguments (longitude, latitude, timestamp), but got {}", helpers.top().functionBuilder.size());
             {
-                const auto timestampFunction = helper.functionBuilder.back();
-                helper.functionBuilder.pop_back();
-                const auto latitudeFunction = helper.functionBuilder.back();
-                helper.functionBuilder.pop_back();
-                const auto longitudeFunction = helper.functionBuilder.back();
-                helper.functionBuilder.pop_back();
-                parentHelper.windowAggs.push_back(
+                const auto timestampFunction = helpers.top().functionBuilder.back();
+                helpers.top().functionBuilder.pop_back();
+                const auto latitudeFunction = helpers.top().functionBuilder.back();
+                helpers.top().functionBuilder.pop_back();
+                const auto longitudeFunction = helpers.top().functionBuilder.back();
+                helpers.top().functionBuilder.pop_back();
+                helpers.top().windowAggs.push_back(
                     TemporalSequenceAggregationLogicalFunction::create(longitudeFunction.get<FieldAccessLogicalFunction>(),
                                                                       latitudeFunction.get<FieldAccessLogicalFunction>(),
                                                                       timestampFunction.get<FieldAccessLogicalFunction>()));
