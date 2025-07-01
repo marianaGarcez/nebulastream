@@ -14,6 +14,8 @@
 
 #pragma once
 
+#pragma once
+
 #include <cstddef>
 #include <memory>
 #include <Aggregation/Function/AggregationPhysicalFunction.hpp>
@@ -33,7 +35,7 @@ public:
         PhysicalFunction inputFunction,
         Nautilus::Record::RecordFieldIdentifier resultFieldIdentifier,
         std::shared_ptr<Nautilus::Interface::MemoryProvider::TupleBufferMemoryProvider> memProviderPagedVector);
-    void lift(const nautilus::val<AggregationState*>& aggregationState, PipelineMemoryProvider& pipelineMemoryProvider, const Nautilus::Record& record)
+    void lift(const nautilus::val<AggregationState*>& aggregationState, ExecutionContext& executionContext, const Nautilus::Record& record)
         override;
     void combine(
         nautilus::val<AggregationState*> aggregationState1,

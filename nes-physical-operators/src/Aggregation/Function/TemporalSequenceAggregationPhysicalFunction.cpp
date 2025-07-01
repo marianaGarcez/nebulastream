@@ -13,7 +13,6 @@
 */
 
 #include <Aggregation/Function/TemporalSequenceAggregationPhysicalFunction.hpp>
-
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -36,6 +35,7 @@
 
 namespace NES
 {
+
 constexpr static std::string_view StateFieldName = "value";
 
 TemporalSequenceAggregationPhysicalFunction::TemporalSequenceAggregationPhysicalFunction(
@@ -49,7 +49,8 @@ TemporalSequenceAggregationPhysicalFunction::TemporalSequenceAggregationPhysical
 {
 }
 
-void TemporalSequenceAggregationPhysicalFunction::lift(const nautilus::val<AggregationState*>& aggregationState, ExecutionContext& executionContext, const Nautilus::Record& record)
+void TemporalSequenceAggregationPhysicalFunction::lift(
+    const nautilus::val<AggregationState*>& aggregationState, ExecutionContext& executionContext, const Nautilus::Record& record)
 {
     const auto memArea = static_cast<nautilus::val<int8_t*>>(aggregationState);
     Record aggregateStateRecord(
@@ -107,7 +108,7 @@ Nautilus::Record TemporalSequenceAggregationPhysicalFunction::lower(
             {
                 if constexpr (std::is_same_v<T, VariableSizedData>)
                 {
-                    throw std::runtime_error("VariableSizedData is not supported in ArrayAggregationPhysicalFunction");
+                    throw std::runtime_error("VariableSizedData is not supported in TemporalSequenceAggregationPhysicalFunction");
                 }
                 else
                 {
@@ -153,16 +154,20 @@ void TemporalSequenceAggregationPhysicalFunction::cleanup(nautilus::val<Aggregat
         aggregationState);
 }
 
-AggregationPhysicalFunctionRegistryReturnType AggregationPhysicalFunctionGeneratedRegistrar::RegisterTemporalSequenceAggregationPhysicalFunction(
+AggregationPhysicalFunctionRegistryReturnType AggregationPhysicalFunctionGeneratedRegistrar::RegisterArray_AggAggregationPhysicalFunction(
     AggregationPhysicalFunctionRegistryArguments arguments)
 {
-    INVARIANT(arguments.memProviderPagedVector.has_value(), "Memory provider paged vector not set");
+    auto memoryLayoutSchema = Schema().addField(std::string(StateFieldName), arguments.inputType);
+    auto layout = std::make_shared<Memory::MemoryLayouts::ColumnLayout>(8192, memoryLayoutSchema);
+    const std::shared_ptr<Nautilus::Interface::MemoryProvider::TupleBufferMemoryProvider> memoryProvider
+        = std::make_shared<Nautilus::Interface::MemoryProvider::ColumnTupleBufferMemoryProvider>(layout);
+
     return std::make_shared<TemporalSequenceAggregationPhysicalFunction>(
         std::move(arguments.inputType),
         std::move(arguments.resultType),
         arguments.inputFunction,
         arguments.resultFieldIdentifier,
-        arguments.memProviderPagedVector.value());
+        memoryProvider);
 }
 
 }
