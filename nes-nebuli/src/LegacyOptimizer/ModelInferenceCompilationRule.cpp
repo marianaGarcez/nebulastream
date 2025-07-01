@@ -17,20 +17,29 @@
 
 #include <LegacyOptimizer/ModelInferenceCompilationRule.hpp>
 
+#ifdef NES_ENABLE_INFERENCE
 #include <LogicalInferModelNameOperator.hpp>
 #include <LogicalInferModelOperator.hpp>
 #include <ModelCatalog.hpp>
+#endif
 
 namespace NES::LegacyOptimizer
 {
 
-ModelInferenceCompilationRule::ModelInferenceCompilationRule(std::shared_ptr<const Nebuli::Inference::ModelCatalog> modelCatalog)
+#ifdef NES_ENABLE_INFERENCE
+ModelInferenceCompilationRule::ModelInferenceCompilationRule(std::shared_ptr<const NES::Nebuli::Inference::ModelCatalog> modelCatalog)
+#else
+ModelInferenceCompilationRule::ModelInferenceCompilationRule([[maybe_unused]] std::shared_ptr<const void> modelCatalog)
+#endif
+#ifdef NES_ENABLE_INFERENCE
     : catalog(std::move(modelCatalog))
+#endif
 {
 }
 
-void ModelInferenceCompilationRule::apply(LogicalPlan& queryPlan)
+void ModelInferenceCompilationRule::apply([[maybe_unused]] LogicalPlan& queryPlan)
 {
+#ifdef NES_ENABLE_INFERENCE
     NES_DEBUG("ModelInferenceCompilationRule: Plan before\n{}", queryPlan);
 
     for (auto modelNameOperator : NES::getOperatorByType<InferModel::LogicalInferModelNameOperator>(queryPlan))
@@ -43,6 +52,10 @@ void ModelInferenceCompilationRule::apply(LogicalPlan& queryPlan)
     }
 
     NES_DEBUG("ModelInferenceCompilationRule: Plan after\n{}", queryPlan);
+#else
+    // When inference is disabled, this rule is a no-op
+    NES_DEBUG("ModelInferenceCompilationRule: Inference disabled, skipping plan modification");
+#endif
 }
 
 }

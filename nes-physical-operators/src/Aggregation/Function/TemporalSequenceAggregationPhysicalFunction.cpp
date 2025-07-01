@@ -170,4 +170,20 @@ AggregationPhysicalFunctionRegistryReturnType AggregationPhysicalFunctionGenerat
         memoryProvider);
 }
 
+AggregationPhysicalFunctionRegistryReturnType AggregationPhysicalFunctionGeneratedRegistrar::RegisterTemporalSequenceAggregationPhysicalFunction(
+    AggregationPhysicalFunctionRegistryArguments arguments)
+{
+    auto memoryLayoutSchema = Schema().addField(std::string(StateFieldName), arguments.inputType);
+    auto layout = std::make_shared<Memory::MemoryLayouts::ColumnLayout>(8192, memoryLayoutSchema);
+    const std::shared_ptr<Nautilus::Interface::MemoryProvider::TupleBufferMemoryProvider> memoryProvider
+        = std::make_shared<Nautilus::Interface::MemoryProvider::ColumnTupleBufferMemoryProvider>(layout);
+
+    return std::make_shared<TemporalSequenceAggregationPhysicalFunction>(
+        std::move(arguments.inputType),
+        std::move(arguments.resultType),
+        arguments.inputFunction,
+        arguments.resultFieldIdentifier,
+        memoryProvider);
+}
+
 }

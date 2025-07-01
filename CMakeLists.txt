@@ -25,6 +25,7 @@ option(CODE_COVERAGE "Compute test coverage" OFF)
 option(NES_ENABLES_TESTS "Enable tests" ON)
 option(NES_ENABLE_PRECOMPILED_HEADERS "Enable precompiled headers (might improve compilation time)" OFF)
 option(NES_ENABLE_EXPERIMENTAL_EXECUTION_MLIR "Enables the MLIR backend." ON)
+option(NES_ENABLE_INFERENCE "Enable inference/ML components" OFF)
 option(NES_LOG_WITH_STACKTRACE "Log exceptions with stacktrace" ON)
 option(ENABLE_LARGE_TESTS "Runs testcases with larger input data" OFF)
 option(CMAKE_NES_DEBUG_TUPLE_BUFFER_LEAKS "Heavyweight instrumentation for Tuplebuffer debugging" OFF)
@@ -56,6 +57,10 @@ endif ()
 
 if (NES_LOG_WITH_STACKTRACE)
     add_compile_definitions(NES_LOG_WITH_STACKTRACE)
+endif ()
+
+if (NES_ENABLE_INFERENCE)
+    add_compile_definitions(NES_ENABLE_INFERENCE)
 endif ()
 
 set(CMAKE_THREAD_LIBS_INIT "-lpthread")
@@ -244,7 +249,10 @@ add_custom_target(build_all_plugins)
 # of shared functionality used by all components of nes
 file(GLOB NES_DIRECTORIES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "nes-*")
 foreach (NES_DIR ${NES_DIRECTORIES})
-    add_subdirectory(${NES_DIR})
+    # Skip inference directory to avoid ONNX model downloads
+    if (NES_ENABLE_INFERENCE OR NOT NES_DIR STREQUAL "nes-inference")
+        add_subdirectory(${NES_DIR})
+    endif()
 endforeach ()
 
 # Other configurations

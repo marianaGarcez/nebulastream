@@ -18,6 +18,7 @@
 #include <istream>
 #include <memory>
 #include <string>
+#include <filesystem>
 #include <unordered_map>
 #include <vector>
 #include <DataTypes/DataType.hpp>
@@ -25,7 +26,9 @@
 #include <Sinks/SinkDescriptor.hpp>
 #include <Sources/LogicalSource.hpp>
 #include <Sources/SourceDescriptor.hpp>
+#ifdef NES_ENABLE_INFERENCE
 #include <ModelCatalog.hpp>
+#endif
 
 namespace NES::CLI
 {
@@ -62,6 +65,7 @@ struct PhysicalSource
     std::unordered_map<std::string, std::string> sourceConfig;
 };
 
+#ifdef NES_ENABLE_INFERENCE
 struct Model
 {
     std::string name;
@@ -69,6 +73,7 @@ struct Model
     std::vector<NES::DataType> inputs;
     std::vector<SchemaField> outputs;
 };
+#endif
 
 struct QueryConfig
 {
@@ -76,7 +81,9 @@ struct QueryConfig
     std::unordered_map<std::string, Sink> sinks;
     std::vector<LogicalSource> logical;
     std::vector<PhysicalSource> physical;
+#ifdef NES_ENABLE_INFERENCE
     std::vector<Model> models;
+#endif
 };
 
 /// Validated and bound content of a YAML file, the members are not specific to the yaml-binder anymore but our "normal" types.
@@ -88,25 +95,39 @@ struct BoundQueryConfig
     std::unordered_map<std::string, std::shared_ptr<Sinks::SinkDescriptor>> sinks;
     std::vector<NES::LogicalSource> logicalSources;
     std::vector<SourceDescriptor> sourceDescriptors;
+#ifdef NES_ENABLE_INFERENCE
     std::vector<Nebuli::Inference::ModelDescriptor> modelDescriptors;
+#endif
 };
 
 class YAMLBinder
 {
     std::shared_ptr<SourceCatalog> sourceCatalog;
+#ifdef NES_ENABLE_INFERENCE
     std::shared_ptr<Nebuli::Inference::ModelCatalog> modelCatalog;
+#endif
 
 public:
+#ifdef NES_ENABLE_INFERENCE
     explicit YAMLBinder(
         const std::shared_ptr<SourceCatalog>& sourceCatalog, const std::shared_ptr<Nebuli::Inference::ModelCatalog>& modelCatalog)
         : sourceCatalog(sourceCatalog), modelCatalog(modelCatalog)
     {
     }
+#else
+    explicit YAMLBinder(
+        const std::shared_ptr<SourceCatalog>& sourceCatalog, [[maybe_unused]] const std::shared_ptr<void>& modelCatalog = nullptr)
+        : sourceCatalog(sourceCatalog)
+    {
+    }
+#endif
 
     BoundQueryConfig parseAndBind(std::istream& inputStream);
     std::vector<NES::LogicalSource> bindRegisterLogicalSources(const std::vector<LogicalSource>& unboundSources);
     std::vector<SourceDescriptor> bindRegisterPhysicalSources(const std::vector<PhysicalSource>& unboundSources);
+#ifdef NES_ENABLE_INFERENCE
     std::vector<Nebuli::Inference::ModelDescriptor> bindRegisterModels(const std::vector<Model>& vector);
+#endif
 };
 
 }

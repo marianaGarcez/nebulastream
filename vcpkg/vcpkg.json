@@ -49,8 +49,7 @@
     "nlohmann-json",
     "nautilus",
     "spdlog",
-    "yaml-cpp",
-    "ireeruntime"
+    "yaml-cpp"
   ],
   "default-features": [
     "mqtt"

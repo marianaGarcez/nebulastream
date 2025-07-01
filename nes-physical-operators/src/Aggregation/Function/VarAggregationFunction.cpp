@@ -43,7 +43,7 @@ VarAggregationFunction::VarAggregationFunction(
 
 void VarAggregationFunction::lift(
     const nautilus::val<AggregationState*>& aggregationState,
-    PipelineMemoryProvider& pipelineMemoryProvider,
+    ExecutionContext& executionContext,
     const Nautilus::Record& record)
 {
     /// Reading old sum, sum of squares, and count from the aggregation state.
@@ -57,7 +57,7 @@ void VarAggregationFunction::lift(
     const auto count = Nautilus::VarVal::readVarValFromMemory(memAreaCount, countType.type);
 
     /// Getting the new value and updating the aggregates
-    const auto value = inputFunction.execute(record, pipelineMemoryProvider.arena);
+    const auto value = inputFunction.execute(record, executionContext.pipelineMemoryProvider.arena);
     const auto newSum = sum + value;
     const auto newSumSq = sumSq + (value * value);
     const auto newCount = count + nautilus::val<uint64_t>(1);

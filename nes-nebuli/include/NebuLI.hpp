@@ -25,7 +25,9 @@
 #include <Sources/SourceDescriptor.hpp>
 #include <experimental/propagate_const>
 #include <GRPCClient.hpp>
+#ifdef NES_ENABLE_INFERENCE
 #include <ModelCatalog.hpp>
+#endif
 
 namespace NES
 {
@@ -39,17 +41,28 @@ namespace NES::CLI
 class LegacyOptimizer
 {
     std::shared_ptr<const SourceCatalog> sourceCatalog;
+#ifdef NES_ENABLE_INFERENCE
     std::shared_ptr<const NES::Nebuli::Inference::ModelCatalog> modelCatalog;
+#endif
 
 public:
     [[nodiscard]] LogicalPlan optimize(const LogicalPlan& plan) const;
     LegacyOptimizer() = default;
+#ifdef NES_ENABLE_INFERENCE
     explicit LegacyOptimizer(
         const std::shared_ptr<const SourceCatalog>& sourceCatalog,
         const std::shared_ptr<const Nebuli::Inference::ModelCatalog>& modelCatalog)
         : sourceCatalog(sourceCatalog), modelCatalog(modelCatalog)
     {
     }
+#else
+    explicit LegacyOptimizer(
+        const std::shared_ptr<const SourceCatalog>& sourceCatalog,
+        [[maybe_unused]] const std::shared_ptr<const void>& modelCatalog = nullptr)
+        : sourceCatalog(sourceCatalog)
+    {
+    }
+#endif
 };
 class Nebuli
 {

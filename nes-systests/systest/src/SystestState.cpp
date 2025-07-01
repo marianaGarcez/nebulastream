@@ -73,7 +73,11 @@ optimizeQueryPlanIfErrorFree(const NES::Systest::LoadedQueryPlan& loadedQueryPla
         sourceNamesToFilepathAndCountForQuery;
     if (loadedQueryPlan.queryPlan.has_value())
     {
+#ifdef NES_ENABLE_INFERENCE
         const NES::CLI::LegacyOptimizer optimizer{loadedQueryPlan.sourceCatalog, loadedQueryPlan.modelCatalog};
+#else
+        const NES::CLI::LegacyOptimizer optimizer{loadedQueryPlan.sourceCatalog, nullptr};
+#endif
         auto optimizedPlan = optimizer.optimize(loadedQueryPlan.queryPlan.value());
         std::ranges::for_each(
             NES::getOperatorByType<NES::SourceDescriptorLogicalOperator>(optimizedPlan),
@@ -491,7 +495,11 @@ std::vector<LoadedQueryPlan> SystestStarterGlobals::SystestBinder::loadFromSLTFi
     SystestStarterGlobals& systestStarterGlobals, const std::filesystem::path& testFilePath, std::string_view testFileName)
 {
     auto sourceCatalog = std::make_shared<SourceCatalog>();
+#ifdef NES_ENABLE_INFERENCE
     auto modelCatalog = std::make_shared<Nebuli::Inference::ModelCatalog>();
+#else
+    std::shared_ptr<void> modelCatalog = nullptr;
+#endif
     std::vector<LoadedQueryPlan> plans{};
     std::unordered_map<std::string, std::shared_ptr<Sinks::SinkDescriptor>> sinks;
     SystestParser parser{};
@@ -611,7 +619,9 @@ std::vector<LoadedQueryPlan> SystestStarterGlobals::SystestBinder::loadFromSLTFi
             }
         });
 
+#ifdef NES_ENABLE_INFERENCE
     parser.registerOnModelCallback([&](Nebuli::Inference::ModelDescriptor&& model) { modelCatalog->registerModel(std::move(model)); });
+#endif
 
     /// We create a new query plan from our config when finding a query
     parser.registerOnQueryCallback(
@@ -714,13 +724,39 @@ std::vector<LoadedQueryPlan> SystestStarterGlobals::SystestBinder::loadFromSLTFi
                 sinkOperator.sinkDescriptor = sink;
                 INVARIANT(!plan.rootOperators.empty(), "Plan has no root operators");
                 plan.rootOperators.at(0) = sinkOperator;
+#ifdef NES_ENABLE_INFERENCE
                 plans.emplace_back(
                     plan, sourceCatalog, modelCatalog, query, sinkNamesToSchema[sinkName], currentQueryNumberInTest, sourcesToFilePaths);
+#else
+                LoadedQueryPlan loadedPlan{
+                    .queryPlan = plan,
+                    .sourceCatalog = sourceCatalog,
+                    .queryName = query,
+                    .sinkSchema = sinkNamesToSchema[sinkName],
+                    .queryIdInTest = currentQueryNumberInTest,
+                    .sourcesToFilePaths = sourcesToFilePaths,
+                    .expectedError = std::nullopt
+                };
+                plans.emplace_back(std::move(loadedPlan));
+#endif
             }
             catch (Exception& e)
             {
+#ifdef NES_ENABLE_INFERENCE
                 plans.emplace_back(
                     std::unexpected(e), sourceCatalog, modelCatalog, query, sinkNamesToSchema[sinkName], currentQueryNumberInTest);
+#else
+                LoadedQueryPlan loadedPlan{
+                    .queryPlan = std::unexpected(e),
+                    .sourceCatalog = sourceCatalog,
+                    .queryName = query,
+                    .sinkSchema = sinkNamesToSchema[sinkName],
+                    .queryIdInTest = currentQueryNumberInTest,
+                    .sourcesToFilePaths = {},
+                    .expectedError = std::nullopt
+                };
+                plans.emplace_back(std::move(loadedPlan));
+#endif
             }
         });
 

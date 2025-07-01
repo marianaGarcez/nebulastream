@@ -29,7 +29,9 @@
 #include <Sources/SourceCatalog.hpp>
 #include <Sources/SourceDescriptor.hpp>
 #include <nlohmann/json_fwd.hpp>
+#ifdef NES_ENABLE_INFERENCE
 #include <ModelCatalog.hpp>
+#endif
 #include <SingleNodeWorkerConfiguration.hpp>
 #include <SystestState.hpp>
 
@@ -44,7 +46,9 @@ struct LoadedQueryPlan
 {
     std::expected<LogicalPlan, Exception> queryPlan;
     std::shared_ptr<SourceCatalog> sourceCatalog;
+#ifdef NES_ENABLE_INFERENCE
     std::shared_ptr<Nebuli::Inference::ModelCatalog> modelCatalog;
+#endif
     std::string queryName;
     Schema sinkSchema;
     SystestQueryId queryIdInTest;

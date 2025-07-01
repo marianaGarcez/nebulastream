@@ -52,7 +52,11 @@ LogicalPlan LegacyOptimizer::optimize(const LogicalPlan& plan) const
     constexpr auto typeInference = NES::LegacyOptimizer::TypeInferencePhase{};
     constexpr auto originIdInferencePhase = NES::LegacyOptimizer::OriginIdInferencePhase{};
     constexpr auto sequentialAggregationRule = NES::LegacyOptimizer::SequentialAggregationRule{};
+#ifdef NES_ENABLE_INFERENCE
     auto modelCompilationRule = NES::LegacyOptimizer::ModelInferenceCompilationRule(modelCatalog);
+#else
+    auto modelCompilationRule = NES::LegacyOptimizer::ModelInferenceCompilationRule(nullptr);
+#endif
 
     sourceInference.apply(newPlan);
     logicalSourceExpansionRule.apply(newPlan);

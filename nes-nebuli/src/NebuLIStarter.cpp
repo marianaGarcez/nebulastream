@@ -113,7 +113,11 @@ int main(int argc, char** argv)
         }
 
         auto sourceCatalog = std::make_shared<NES::SourceCatalog>();
+#ifdef NES_ENABLE_INFERENCE
         auto modelCatalog = std::make_shared<NES::Nebuli::Inference::ModelCatalog>();
+#else
+        std::shared_ptr<void> modelCatalog = nullptr;
+#endif
         auto yamlBinder = NES::CLI::YAMLBinder{sourceCatalog, modelCatalog};
         auto optimizer = NES::CLI::LegacyOptimizer{sourceCatalog, modelCatalog};
 

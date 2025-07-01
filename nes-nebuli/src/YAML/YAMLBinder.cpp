@@ -105,6 +105,7 @@ struct convert<NES::CLI::PhysicalSource>
     }
 };
 
+#ifdef NES_ENABLE_INFERENCE
 template <>
 struct convert<NES::CLI::Model>
 {
@@ -118,6 +119,7 @@ struct convert<NES::CLI::Model>
         return true;
     }
 };
+#endif
 
 template <>
 struct convert<NES::CLI::QueryConfig>
@@ -129,10 +131,12 @@ struct convert<NES::CLI::QueryConfig>
         rhs.logical = node["logical"].as<std::vector<NES::CLI::LogicalSource>>();
         rhs.physical = node["physical"].as<std::vector<NES::CLI::PhysicalSource>>();
         rhs.query = node["query"].as<std::string>();
+#ifdef NES_ENABLE_INFERENCE
         if (node["models"].IsDefined())
         {
             rhs.models = node["models"].as<std::vector<NES::CLI::Model>>();
         }
+#endif
         return true;
     }
 };
@@ -220,6 +224,7 @@ std::vector<SourceDescriptor> YAMLBinder::bindRegisterPhysicalSources(const std:
     return boundSources;
 }
 
+#ifdef NES_ENABLE_INFERENCE
 std::vector<Nebuli::Inference::ModelDescriptor> YAMLBinder::bindRegisterModels(const std::vector<Model>& unboundModels)
 {
     auto boundModels = unboundModels
@@ -237,15 +242,25 @@ std::vector<Nebuli::Inference::ModelDescriptor> YAMLBinder::bindRegisterModels(c
     std::ranges::for_each(boundModels, [&](const auto& model) { modelCatalog->registerModel(model); });
     return boundModels;
 }
+#endif
 
 BoundQueryConfig YAMLBinder::parseAndBind(std::istream& inputStream)
 {
     BoundQueryConfig config{};
+#ifdef NES_ENABLE_INFERENCE
     auto& [plan, sinks, logicalSources, physicalSources, models] = config;
+#else
+    auto& [plan, sinks, logicalSources, physicalSources] = config;
+#endif
     try
     {
+#ifdef NES_ENABLE_INFERENCE
         auto [queryString, unboundSinks, unboundLogicalSources, unboundPhysicalSources, unboundModels]
             = YAML::Load(inputStream).as<QueryConfig>();
+#else
+        auto [queryString, unboundSinks, unboundLogicalSources, unboundPhysicalSources]
+            = YAML::Load(inputStream).as<QueryConfig>();
+#endif
         plan = AntlrSQLQueryParser::createLogicalQueryPlanFromSQLString(queryString);
         const auto sinkOperators = plan.rootOperators;
         if (sinkOperators.size() != 1)
@@ -273,7 +288,9 @@ BoundQueryConfig YAMLBinder::parseAndBind(std::istream& inputStream)
         plan.rootOperators.at(0) = *sinkOperator;
         logicalSources = bindRegisterLogicalSources(unboundLogicalSources);
         physicalSources = bindRegisterPhysicalSources(unboundPhysicalSources);
+#ifdef NES_ENABLE_INFERENCE
         models = bindRegisterModels(unboundModels);
+#endif
         return config;
     }
     catch (const YAML::ParserException& pex)
