@@ -16,9 +16,9 @@
 #include <utility>
 #include <DataTypes/TimeUnit.hpp>
 #include <Functions/PhysicalFunction.hpp>
-#include <Nautilus/Interface/Record.hpp>
-#include <Nautilus/Interface/RecordBuffer.hpp>
-#include <Nautilus/Interface/TimestampRef.hpp>
+#include <nautilus/Interface/Record.hpp>
+#include <nautilus/Interface/RecordBuffer.hpp>
+#include <nautilus/Interface/TimestampRef.hpp>
 #include <Time/Timestamp.hpp>
 #include <Watermark/TimeFunction.hpp>
 #include <ExecutionContext.hpp>

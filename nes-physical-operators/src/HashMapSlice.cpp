@@ -20,8 +20,8 @@
 #include <numeric>
 #include <vector>
 #include <Identifiers/Identifiers.hpp>
-#include <Nautilus/Interface/HashMap/ChainedHashMap/ChainedHashMap.hpp>
-#include <Nautilus/Interface/HashMap/HashMap.hpp>
+#include <nautilus/Interface/HashMap/ChainedHashMap/ChainedHashMap.hpp>
+#include <nautilus/Interface/HashMap/HashMap.hpp>
 #include <SliceStore/Slice.hpp>
 #include <ErrorHandling.hpp>
 

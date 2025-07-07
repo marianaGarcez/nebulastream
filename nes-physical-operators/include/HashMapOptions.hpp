@@ -21,9 +21,9 @@
 #include <utility>
 #include <vector>
 #include <Functions/PhysicalFunction.hpp>
-#include <Nautilus/Interface/Hash/HashFunction.hpp>
-#include <Nautilus/Interface/HashMap/ChainedHashMap/ChainedEntryMemoryProvider.hpp>
-#include <Nautilus/Interface/HashMap/HashMap.hpp>
+#include <nautilus/Interface/Hash/HashFunction.hpp>
+#include <nautilus/Interface/HashMap/ChainedHashMap/ChainedEntryMemoryProvider.hpp>
+#include <nautilus/Interface/HashMap/HashMap.hpp>
 #include <ErrorHandling.hpp>
 
 

@@ -21,11 +21,11 @@
 #include <utility>
 #include <vector>
 #include <Identifiers/Identifiers.hpp>
-#include <Nautilus/DataTypes/DataTypesUtil.hpp>
-#include <Nautilus/DataTypes/VarVal.hpp>
-#include <Nautilus/Interface/NESStrongTypeRef.hpp>
-#include <Nautilus/Interface/RecordBuffer.hpp>
-#include <Nautilus/Interface/TimestampRef.hpp>
+#include <nautilus/DataTypes/DataTypesUtil.hpp>
+#include <nautilus/DataTypes/VarVal.hpp>
+#include <nautilus/Interface/NESStrongTypeRef.hpp>
+#include <nautilus/Interface/RecordBuffer.hpp>
+#include <nautilus/Interface/TimestampRef.hpp>
 #include <Runtime/AbstractBufferProvider.hpp>
 #include <Runtime/Execution/OperatorHandler.hpp>
 #include <Runtime/TupleBuffer.hpp>

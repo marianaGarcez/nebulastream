@@ -19,9 +19,9 @@
 #include <Functions/PhysicalFunction.hpp>
 #include <Join/StreamJoinProbePhysicalOperator.hpp>
 #include <Join/StreamJoinUtil.hpp>
-#include <Nautilus/Interface/MemoryProvider/TupleBufferMemoryProvider.hpp>
-#include <Nautilus/Interface/PagedVector/PagedVectorRef.hpp>
-#include <Nautilus/Interface/RecordBuffer.hpp>
+#include <nautilus/Interface/MemoryProvider/TupleBufferMemoryProvider.hpp>
+#include <nautilus/Interface/PagedVector/PagedVectorRef.hpp>
+#include <nautilus/Interface/RecordBuffer.hpp>
 #include <Runtime/Execution/OperatorHandler.hpp>
 #include <Windowing/WindowMetaData.hpp>
 

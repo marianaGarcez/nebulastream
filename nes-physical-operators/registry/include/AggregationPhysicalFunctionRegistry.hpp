@@ -20,8 +20,8 @@
 #include <Aggregation/Function/AggregationPhysicalFunction.hpp>
 #include <DataTypes/DataType.hpp>
 #include <Functions/PhysicalFunction.hpp>
-#include <Nautilus/Interface/MemoryProvider/TupleBufferMemoryProvider.hpp>
-#include <Nautilus/Interface/Record.hpp>
+#include <nautilus/Interface/MemoryProvider/TupleBufferMemoryProvider.hpp>
+#include <nautilus/Interface/Record.hpp>
 #include <Util/Registry.hpp>
 
 namespace NES

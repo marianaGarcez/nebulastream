@@ -16,8 +16,8 @@
 #include <Functions/ConstantValuePhysicalFunction.hpp>
 #include <Functions/ConstantValueVariableSizePhysicalFunction.hpp>
 #include <Functions/PhysicalFunction.hpp>
-#include <Nautilus/DataTypes/VarVal.hpp>
-#include <Nautilus/Interface/Record.hpp>
+#include <nautilus/DataTypes/VarVal.hpp>
+#include <nautilus/Interface/Record.hpp>
 #include <folly/Function.h>
 #include <ExecutionContext.hpp>
 #include <PhysicalFunctionRegistry.hpp>

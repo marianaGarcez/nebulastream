@@ -15,7 +15,7 @@
 #pragma once
 #include <memory>
 #include <vector>
-#include <Nautilus/DataTypes/VarVal.hpp>
+#include <nautilus/DataTypes/VarVal.hpp>
 
 namespace NES::Nautilus::Interface
 {

@@ -11,13 +11,13 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 */
-#include <Nautilus/Interface/Hash/MurMur3HashFunction.hpp>
+#include <nautilus/Interface/Hash/MurMur3HashFunction.hpp>
 
 #include <cstdint>
 #include <memory>
-#include <Nautilus/DataTypes/VarVal.hpp>
-#include <Nautilus/DataTypes/VariableSizedData.hpp>
-#include <Nautilus/Interface/Hash/HashFunction.hpp>
+#include <nautilus/DataTypes/VarVal.hpp>
+#include <nautilus/DataTypes/VariableSizedData.hpp>
+#include <nautilus/Interface/Hash/HashFunction.hpp>
 #include <nautilus/function.hpp>
 #include <nautilus/val.hpp>
 #include <ErrorHandling.hpp>

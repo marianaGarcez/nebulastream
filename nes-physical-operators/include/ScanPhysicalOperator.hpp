@@ -17,9 +17,9 @@
 #include <memory>
 #include <optional>
 #include <vector>
-#include <Nautilus/Interface/MemoryProvider/TupleBufferMemoryProvider.hpp>
-#include <Nautilus/Interface/Record.hpp>
-#include <Nautilus/Interface/RecordBuffer.hpp>
+#include <nautilus/Interface/MemoryProvider/TupleBufferMemoryProvider.hpp>
+#include <nautilus/Interface/Record.hpp>
+#include <nautilus/Interface/RecordBuffer.hpp>
 #include <PhysicalOperator.hpp>
 
 namespace NES

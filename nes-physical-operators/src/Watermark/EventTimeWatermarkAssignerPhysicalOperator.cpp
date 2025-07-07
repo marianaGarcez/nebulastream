@@ -15,9 +15,9 @@
 #include <memory>
 #include <optional>
 #include <utility>
-#include <Nautilus/Interface/Record.hpp>
-#include <Nautilus/Interface/RecordBuffer.hpp>
-#include <Nautilus/Interface/TimestampRef.hpp>
+#include <nautilus/Interface/Record.hpp>
+#include <nautilus/Interface/RecordBuffer.hpp>
+#include <nautilus/Interface/TimestampRef.hpp>
 #include <Time/Timestamp.hpp>
 #include <Util/Common.hpp>
 #include <Watermark/EventTimeWatermarkAssignerPhysicalOperator.hpp>

@@ -16,9 +16,9 @@
 
 
 #include <functional>
-#include <Nautilus/Interface/Hash/HashFunction.hpp>
-#include <Nautilus/Interface/HashMap/HashMap.hpp>
-#include <Nautilus/Interface/Record.hpp>
+#include <nautilus/Interface/Hash/HashFunction.hpp>
+#include <nautilus/Interface/HashMap/HashMap.hpp>
+#include <nautilus/Interface/Record.hpp>
 
 #include <Runtime/AbstractBufferProvider.hpp>
 #include <val_ptr.hpp>

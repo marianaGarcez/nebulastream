@@ -11,7 +11,7 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 */
-#include <Nautilus/DataTypes/VarVal.hpp>
+#include <nautilus/DataTypes/VarVal.hpp>
 
 #include <cstdint>
 #include <ostream>
@@ -20,8 +20,8 @@
 #include <utility>
 #include <variant>
 #include <DataTypes/DataType.hpp>
-#include <Nautilus/DataTypes/DataTypesUtil.hpp>
-#include <Nautilus/DataTypes/VariableSizedData.hpp>
+#include <nautilus/DataTypes/DataTypesUtil.hpp>
+#include <nautilus/DataTypes/VariableSizedData.hpp>
 #include <magic_enum/magic_enum.hpp>
 #include <nautilus/std/ostream.h>
 #include <nautilus/val.hpp>

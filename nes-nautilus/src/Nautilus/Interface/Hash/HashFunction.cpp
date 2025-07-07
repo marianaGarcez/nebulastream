@@ -12,8 +12,8 @@
     limitations under the License.
 */
 #include <vector>
-#include <Nautilus/DataTypes/VarVal.hpp>
-#include <Nautilus/Interface/Hash/HashFunction.hpp>
+#include <nautilus/DataTypes/VarVal.hpp>
+#include <nautilus/Interface/Hash/HashFunction.hpp>
 #include <static.hpp>
 
 namespace NES::Nautilus::Interface

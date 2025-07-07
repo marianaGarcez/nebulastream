@@ -16,7 +16,7 @@
 
 #include <memory>
 #include <MemoryLayout/RowLayout.hpp>
-#include <Nautilus/Interface/MemoryProvider/RowTupleBufferMemoryProvider.hpp>
+#include <nautilus/Interface/MemoryProvider/RowTupleBufferMemoryProvider.hpp>
 #include <Operators/LogicalOperator.hpp>
 #include <Operators/SequenceLogicalOperator.hpp>
 #include <Operators/Sinks/SinkLogicalOperator.hpp>

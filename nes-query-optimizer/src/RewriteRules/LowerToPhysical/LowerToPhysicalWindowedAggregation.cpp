@@ -33,11 +33,11 @@
 #include <Functions/FunctionProvider.hpp>
 #include <Functions/PhysicalFunction.hpp>
 #include <MemoryLayout/ColumnLayout.hpp>
-#include <Nautilus/Interface/Hash/MurMur3HashFunction.hpp>
-#include <Nautilus/Interface/HashMap/ChainedHashMap/ChainedEntryMemoryProvider.hpp>
-#include <Nautilus/Interface/HashMap/ChainedHashMap/ChainedHashMap.hpp>
-#include <Nautilus/Interface/MemoryProvider/ColumnTupleBufferMemoryProvider.hpp>
-#include <Nautilus/Interface/Record.hpp>
+#include <nautilus/Interface/Hash/MurMur3HashFunction.hpp>
+#include <nautilus/Interface/HashMap/ChainedHashMap/ChainedEntryMemoryProvider.hpp>
+#include <nautilus/Interface/HashMap/ChainedHashMap/ChainedHashMap.hpp>
+#include <nautilus/Interface/MemoryProvider/ColumnTupleBufferMemoryProvider.hpp>
+#include <nautilus/Interface/Record.hpp>
 #include <Operators/LogicalOperator.hpp>
 #include <Operators/Windows/WindowedAggregationLogicalOperator.hpp>
 #include <RewriteRules/AbstractRewriteRule.hpp>

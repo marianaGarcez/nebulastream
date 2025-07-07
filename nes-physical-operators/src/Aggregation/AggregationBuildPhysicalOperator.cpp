@@ -22,9 +22,9 @@
 #include <Aggregation/AggregationOperatorHandler.hpp>
 #include <Aggregation/Function/AggregationPhysicalFunction.hpp>
 #include <Identifiers/Identifiers.hpp>
-#include <Nautilus/Interface/HashMap/ChainedHashMap/ChainedHashMapRef.hpp>
-#include <Nautilus/Interface/HashMap/HashMap.hpp>
-#include <Nautilus/Interface/Record.hpp>
+#include <nautilus/Interface/HashMap/ChainedHashMap/ChainedHashMapRef.hpp>
+#include <nautilus/Interface/HashMap/HashMap.hpp>
+#include <nautilus/Interface/Record.hpp>
 #include <SliceStore/Slice.hpp>
 #include <Time/Timestamp.hpp>
 #include <Engine.hpp>

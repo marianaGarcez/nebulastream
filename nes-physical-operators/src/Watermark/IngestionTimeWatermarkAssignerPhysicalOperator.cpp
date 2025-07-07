@@ -14,8 +14,8 @@
 
 #include <optional>
 #include <utility>
-#include <Nautilus/Interface/Record.hpp>
-#include <Nautilus/Interface/RecordBuffer.hpp>
+#include <nautilus/Interface/Record.hpp>
+#include <nautilus/Interface/RecordBuffer.hpp>
 #include <Watermark/IngestionTimeWatermarkAssignerPhysicalOperator.hpp>
 #include <Watermark/TimeFunction.hpp>
 #include <ExecutionContext.hpp>

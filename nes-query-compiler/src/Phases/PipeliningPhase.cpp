@@ -20,7 +20,7 @@
 #include <utility>
 #include <Identifiers/Identifiers.hpp>
 #include <MemoryLayout/RowLayout.hpp>
-#include <Nautilus/Interface/MemoryProvider/RowTupleBufferMemoryProvider.hpp>
+#include <nautilus/Interface/MemoryProvider/RowTupleBufferMemoryProvider.hpp>
 #include <Runtime/Execution/OperatorHandler.hpp>
 #include <Util/Logger/Logger.hpp>
 #include <EmitOperatorHandler.hpp>

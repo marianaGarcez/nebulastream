@@ -17,9 +17,9 @@
 #include <cstdint>
 #include <utility>
 #include <Functions/PhysicalFunction.hpp>
-#include <Nautilus/DataTypes/VarVal.hpp>
-#include <Nautilus/DataTypes/VariableSizedData.hpp>
-#include <Nautilus/Interface/Record.hpp>
+#include <nautilus/DataTypes/VarVal.hpp>
+#include <nautilus/DataTypes/VariableSizedData.hpp>
+#include <nautilus/Interface/Record.hpp>
 #include <nautilus/std/cstring.h>
 #include <ErrorHandling.hpp>
 #include <ExecutionContext.hpp>

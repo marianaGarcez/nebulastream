@@ -19,10 +19,10 @@
 #include <vector>
 #include <MemoryLayout/ColumnLayout.hpp>
 #include <MemoryLayout/MemoryLayout.hpp>
-#include <Nautilus/DataTypes/VarVal.hpp>
-#include <Nautilus/Interface/MemoryProvider/ColumnTupleBufferMemoryProvider.hpp>
-#include <Nautilus/Interface/Record.hpp>
-#include <Nautilus/Interface/RecordBuffer.hpp>
+#include <nautilus/DataTypes/VarVal.hpp>
+#include <nautilus/Interface/MemoryProvider/ColumnTupleBufferMemoryProvider.hpp>
+#include <nautilus/Interface/Record.hpp>
+#include <nautilus/Interface/RecordBuffer.hpp>
 #include <Runtime/AbstractBufferProvider.hpp>
 #include <nautilus/static.hpp>
 #include <nautilus/val_ptr.hpp>

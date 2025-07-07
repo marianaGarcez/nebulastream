@@ -20,7 +20,7 @@
 #include <optional>
 #include <vector>
 #include <Identifiers/Identifiers.hpp>
-#include <Nautilus/Interface/HashMap/HashMap.hpp>
+#include <nautilus/Interface/HashMap/HashMap.hpp>
 #include <SliceStore/Slice.hpp>
 
 namespace NES

@@ -17,7 +17,7 @@
 #include <memory>
 #include <variant>
 #include <DataTypes/DataType.hpp>
-#include <Nautilus/DataTypes/VariableSizedData.hpp>
+#include <nautilus/DataTypes/VariableSizedData.hpp>
 #include <Util/Logger/Logger.hpp>
 #include <nautilus/std/ostream.h>
 #include <nautilus/std/sstream.h>

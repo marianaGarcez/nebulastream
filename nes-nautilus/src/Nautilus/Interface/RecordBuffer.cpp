@@ -14,10 +14,10 @@
 
 #include <cstdint>
 #include <Identifiers/Identifiers.hpp>
-#include <Nautilus/Interface/NESStrongTypeRef.hpp>
-#include <Nautilus/Interface/RecordBuffer.hpp>
-#include <Nautilus/Interface/TimestampRef.hpp>
-#include <Nautilus/Interface/TupleBufferProxyFunctions.hpp>
+#include <nautilus/Interface/NESStrongTypeRef.hpp>
+#include <nautilus/Interface/RecordBuffer.hpp>
+#include <nautilus/Interface/TimestampRef.hpp>
+#include <nautilus/Interface/TupleBufferProxyFunctions.hpp>
 #include <Runtime/TupleBuffer.hpp>
 #include <Time/Timestamp.hpp>
 #include <nautilus/function.hpp>

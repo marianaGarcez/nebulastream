@@ -17,8 +17,8 @@
 #include <cstdint>
 #include <Identifiers/Identifiers.hpp>
 #include <MemoryLayout/MemoryLayout.hpp>
-#include <Nautilus/DataTypes/VarVal.hpp>
-#include <Nautilus/Interface/NESStrongTypeRef.hpp>
+#include <nautilus/DataTypes/VarVal.hpp>
+#include <nautilus/Interface/NESStrongTypeRef.hpp>
 #include <Time/Timestamp.hpp>
 #include <val.hpp>
 #include <val_concepts.hpp>

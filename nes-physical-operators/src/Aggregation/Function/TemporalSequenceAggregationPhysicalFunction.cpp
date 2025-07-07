@@ -21,11 +21,11 @@
 #include <utility>
 
 #include <MemoryLayout/ColumnLayout.hpp>
-#include <Nautilus/Interface/MemoryProvider/ColumnTupleBufferMemoryProvider.hpp>
-#include <Nautilus/Interface/MemoryProvider/TupleBufferMemoryProvider.hpp>
-#include <Nautilus/Interface/PagedVector/PagedVector.hpp>
-#include <Nautilus/Interface/PagedVector/PagedVectorRef.hpp>
-#include <Nautilus/Interface/Record.hpp>
+#include <nautilus/Interface/MemoryProvider/ColumnTupleBufferMemoryProvider.hpp>
+#include <nautilus/Interface/MemoryProvider/TupleBufferMemoryProvider.hpp>
+#include <nautilus/Interface/PagedVector/PagedVector.hpp>
+#include <nautilus/Interface/PagedVector/PagedVectorRef.hpp>
+#include <nautilus/Interface/Record.hpp>
 #include <nautilus/function.hpp>
 
 #include <AggregationPhysicalFunctionRegistry.hpp>

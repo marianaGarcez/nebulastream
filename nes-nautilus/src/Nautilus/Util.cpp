@@ -15,8 +15,8 @@
 #include <cstdint>
 #include <limits>
 #include <DataTypes/DataType.hpp>
-#include <Nautilus/DataTypes/VarVal.hpp>
-#include <Nautilus/Util.hpp>
+#include <nautilus/DataTypes/VarVal.hpp>
+#include <nautilus/Util.hpp>
 #include <Util/Logger/LogLevel.hpp>
 #include <Util/Logger/Logger.hpp>
 #include <magic_enum/magic_enum.hpp>

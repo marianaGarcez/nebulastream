@@ -17,8 +17,8 @@
 #include <cstddef>
 #include <memory>
 #include <Aggregation/Function/AggregationPhysicalFunction.hpp>
-#include <Nautilus/Interface/MemoryProvider/TupleBufferMemoryProvider.hpp>
-#include <Nautilus/Interface/Record.hpp>
+#include <nautilus/Interface/MemoryProvider/TupleBufferMemoryProvider.hpp>
+#include <nautilus/Interface/Record.hpp>
 #include <val_concepts.hpp>
 
 namespace NES

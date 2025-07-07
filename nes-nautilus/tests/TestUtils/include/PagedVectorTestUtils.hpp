@@ -17,8 +17,8 @@
 #include <memory>
 #include <vector>
 #include <DataTypes/Schema.hpp>
-#include <Nautilus/Interface/PagedVector/PagedVector.hpp>
-#include <Nautilus/Interface/Record.hpp>
+#include <nautilus/Interface/PagedVector/PagedVector.hpp>
+#include <nautilus/Interface/Record.hpp>
 #include <Runtime/AbstractBufferProvider.hpp>
 #include <Runtime/TupleBuffer.hpp>
 #include <nautilus/Engine.hpp>

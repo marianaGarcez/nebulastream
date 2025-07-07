@@ -18,7 +18,7 @@
 #include <tuple>
 #include <vector>
 #include <DataTypes/DataType.hpp>
-#include <Nautilus/Interface/HashMap/ChainedHashMap/ChainedHashMap.hpp>
+#include <nautilus/Interface/HashMap/ChainedHashMap/ChainedHashMap.hpp>
 
 #include <Util/ExecutionMode.hpp>
 #include <Util/Logger/LogLevel.hpp>

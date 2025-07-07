@@ -15,7 +15,7 @@
 #include <memory>
 
 #include <Functions/PhysicalFunction.hpp>
-#include <Nautilus/DataTypes/VariableSizedData.hpp>
+#include <nautilus/DataTypes/VariableSizedData.hpp>
 
 #include "PhysicalFunctionRegistry.hpp"
 

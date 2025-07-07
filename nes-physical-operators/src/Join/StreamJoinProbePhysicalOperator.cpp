@@ -21,8 +21,8 @@
 #include <Functions/PhysicalFunction.hpp>
 #include <Identifiers/Identifiers.hpp>
 #include <Join/StreamJoinUtil.hpp>
-#include <Nautilus/Interface/Record.hpp>
-#include <Nautilus/Interface/TimestampRef.hpp>
+#include <nautilus/Interface/Record.hpp>
+#include <nautilus/Interface/TimestampRef.hpp>
 #include <Runtime/Execution/OperatorHandler.hpp>
 #include <Time/Timestamp.hpp>
 #include <Windowing/WindowMetaData.hpp>

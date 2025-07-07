@@ -15,8 +15,8 @@
 #pragma once
 #include <cstdint>
 #include <vector>
-#include <Nautilus/Interface/HashMap/HashMap.hpp>
-#include <Nautilus/Interface/Record.hpp>
+#include <nautilus/Interface/HashMap/HashMap.hpp>
+#include <nautilus/Interface/Record.hpp>
 #include <Runtime/AbstractBufferProvider.hpp>
 #include <Runtime/TupleBuffer.hpp>
 #include <ChainedHashMapTestUtils.hpp>

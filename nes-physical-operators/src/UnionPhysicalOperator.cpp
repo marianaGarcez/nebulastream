@@ -14,7 +14,7 @@
 
 #include <optional>
 #include <utility>
-#include <Nautilus/Interface/Record.hpp>
+#include <nautilus/Interface/Record.hpp>
 #include <PhysicalOperator.hpp>
 #include <UnionPhysicalOperator.hpp>
 

@@ -15,7 +15,7 @@
 #include <optional>
 #include <utility>
 #include <Functions/PhysicalFunction.hpp>
-#include <Nautilus/Interface/Record.hpp>
+#include <nautilus/Interface/Record.hpp>
 #include <ExecutionContext.hpp>
 #include <MapPhysicalOperator.hpp>
 #include <PhysicalOperator.hpp>

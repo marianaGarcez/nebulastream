@@ -15,8 +15,8 @@
 #pragma once
 #include <DataTypes/DataType.hpp>
 #include <Functions/PhysicalFunction.hpp>
-#include <Nautilus/DataTypes/VarVal.hpp>
-#include <Nautilus/Interface/Record.hpp>
+#include <nautilus/DataTypes/VarVal.hpp>
+#include <nautilus/Interface/Record.hpp>
 #include <ExecutionContext.hpp>
 
 namespace NES
