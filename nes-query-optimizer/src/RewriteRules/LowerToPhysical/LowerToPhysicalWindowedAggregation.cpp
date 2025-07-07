@@ -28,6 +28,7 @@
 #include <Operators/Windows/Aggregations/TemporalSequenceAggregationLogicalFunction.hpp>
 #include <Configurations/Worker/QueryOptimizerConfiguration.hpp>
 #include <DataTypes/DataTypeProvider.hpp>
+#include <DataTypes/Schema.hpp>
 #include <Functions/FieldAccessPhysicalFunction.hpp>
 #include <Functions/FunctionProvider.hpp>
 #include <Functions/PhysicalFunction.hpp>
@@ -148,15 +149,21 @@ std::vector<std::shared_ptr<AggregationPhysicalFunction>> getAggregationPhysical
             // TEMPORAL_SEQUENCE outputs VARSIZED trajectory data
             auto varsizedType = DataTypeProvider::provideDataType(DataType::Type::VARSIZED);
             
-            // Create memory layout and provider for PagedVector
+            // Create memory layout for storing trajectory points (lon, lat, timestamp)
+            auto memoryLayoutSchema = Schema()
+                .addField("longitude", DataType::Type::FLOAT64)
+                .addField("latitude", DataType::Type::FLOAT64)
+                .addField("timestamp", DataType::Type::UINT64);
             auto layout = std::make_shared<Memory::MemoryLayouts::ColumnLayout>(
-                NES::Configurations::DEFAULT_PAGED_VECTOR_SIZE, logicalOperator.getInputSchemas()[0]);
-            auto memoryProvider = std::make_unique<Nautilus::Interface::MemoryProvider::ColumnTupleBufferMemoryProvider>(layout);
+                8192, memoryLayoutSchema);
+            auto memoryProvider = std::make_shared<Nautilus::Interface::MemoryProvider::ColumnTupleBufferMemoryProvider>(layout);
             
             aggregationPhysicalFunctions.emplace_back(std::make_shared<TemporalSequenceAggregationPhysicalFunction>(
                 std::move(varsizedType),       // Input type (VARSIZED for trajectory state)
                 std::move(physicalFinalType), // Result type (will be VARSIZED)
-                std::move(aggregationInputFunction), // Primary input function
+                std::move(lonPhysicalFunction),      // Longitude function
+                std::move(latPhysicalFunction),      // Latitude function
+                std::move(timestampPhysicalFunction), // Timestamp function
                 resultFieldIdentifier,
                 std::move(memoryProvider)));
         }

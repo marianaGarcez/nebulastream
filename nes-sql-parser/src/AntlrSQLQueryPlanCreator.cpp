@@ -988,6 +988,8 @@ void AntlrSQLQueryPlanCreator::exitFunctionCall(AntlrSQLParser::FunctionCallCont
                     TemporalSequenceAggregationLogicalFunction::create(longitudeFunction.get<FieldAccessLogicalFunction>(),
                                                                       latitudeFunction.get<FieldAccessLogicalFunction>(),
                                                                       timestampFunction.get<FieldAccessLogicalFunction>()));
+                // Push back one function for named expression handling
+                helpers.top().functionBuilder.push_back(longitudeFunction);
             }
             break;
         default:

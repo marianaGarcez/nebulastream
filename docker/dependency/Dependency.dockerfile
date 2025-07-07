@@ -19,6 +19,10 @@ RUN  zstd --decompress nes-llvm-${LLVM_VERSION}-${ARCH}-${SANITIZER}-${STDLIB}.t
 FROM nebulastream/nes-development-base:${TAG}
 ARG STDLIB=libcxx
 
+# Add non-interactive environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
 COPY --from=llvm-download /clang /clang
 ENV CMAKE_PREFIX_PATH="/clang/:${CMAKE_PREFIX_PATH}"
 
@@ -36,8 +40,8 @@ RUN \
     cd /vcpkg_input \
     && git clone https://github.com/microsoft/vcpkg.git vcpkg_repository \
     && vcpkg_repository/bootstrap-vcpkg.sh --disableMetrics \
-    && vcpkg_repository/vcpkg install --overlay-triplets=custom-triplets --overlay-ports=vcpkg-registry/ports --triplet="${ARCH}-linux-${SANITIZER}-${VCPKG_STDLIB}" --host-triplet="${ARCH}-linux-none-${VCPKG_STDLIB}" \
-    && vcpkg_repository/vcpkg export --overlay-triplets=custom-triplets --overlay-ports=vcpkg-registry/ports --triplet="${ARCH}-linux-${SANITIZER}-${VCPKG_STDLIB}" --host-triplet="${ARCH}-linux-none-${VCPKG_STDLIB}" --raw --output-dir / --output vcpkg \
+    && vcpkg_repository/vcpkg install --overlay-triplets=/vcpkg_input/custom-triplets --overlay-ports=/vcpkg_input/vcpkg-registry/ports --triplet="${ARCH}-linux-${SANITIZER}-${VCPKG_STDLIB}" --host-triplet="${ARCH}-linux-none-${VCPKG_STDLIB}" --x-manifest-root=/vcpkg_input \
+    && vcpkg_repository/vcpkg export --overlay-triplets=/vcpkg_input/custom-triplets --overlay-ports=/vcpkg_input/vcpkg-registry/ports --triplet="${ARCH}-linux-${SANITIZER}-${VCPKG_STDLIB}" --host-triplet="${ARCH}-linux-none-${VCPKG_STDLIB}" --x-manifest-root=/vcpkg_input --x-install-root=/vcpkg_input/vcpkg_installed --raw --output-dir / --output vcpkg \
     && rm -rf /vcpkg_input \
     && chmod -R g=u,o=u /vcpkg
 

@@ -315,7 +315,7 @@ include(${PROJECT_SOURCE_DIR}/cmake/PluginRegistrationUtil.cmake)
 
 # Register plugins
 register_plugin("Connectors/SourceDescriptors/SourceDescriptor" OFF)
-register_plugin("Connectors/Sources/MQTTSource" ON)
+register_plugin("Connectors/Sources/MQTTSource" OFF)
 register_plugin("Connectors/Sinks/PrintSink" ON)
 register_plugin("Operators/FilterOperator" ON)
 register_plugin("Types/UInt16" ON)

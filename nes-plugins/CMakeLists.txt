@@ -24,8 +24,7 @@ activate_optional_plugin("Inference/IREE" OFF)
 activate_optional_plugin("Sources/GeneratorSource" ON)
 activate_optional_plugin("Sources/AudioSource" OFF)
 
-# MEOS is a dependency
-activate_optional_plugin("MEOS" ON)
+# MEOS configuration - must be done before activating the plugin
 message(STATUS "Enable MEOS Plugin")
 
 # Detect the platform
@@ -41,15 +40,18 @@ if (APPLE)
 else()
     message(STATUS "Building on Linux")
 
-    # Default behavior for Linux
+    # Default behavior for Linux - find MEOS before activating the plugin
     find_package(meos REQUIRED)
     if(meos_FOUND)
-        message(STATUS "MEOS found: include=${meos_INCLUDE_DIR}, library=${meos}")
+        message(STATUS "MEOS found: include=${meos_INCLUDE_DIR}, library=${meos_LIBRARY}")
         include_directories(SYSTEM ${meos_INCLUDE_DIR})
     else()
         message(FATAL_ERROR "MEOS library not found")
     endif()
 endif()
+
+# Now activate the MEOS plugin after finding the library
+activate_optional_plugin("MEOS" ON)
 
 if (NES_ENABLES_TESTS)
   # ChecksumSink depends on Checksum.cpp from systest which is only added when tests are enabled.

@@ -14,8 +14,6 @@
 
 #pragma once
 
-#pragma once
-
 #include <cstddef>
 #include <memory>
 #include <Aggregation/Function/AggregationPhysicalFunction.hpp>
@@ -32,7 +30,9 @@ public:
     TemporalSequenceAggregationPhysicalFunction(
         DataType inputType,
         DataType resultType,
-        PhysicalFunction inputFunction,
+        PhysicalFunction lonFunction,
+        PhysicalFunction latFunction,
+        PhysicalFunction timestampFunction,
         Nautilus::Record::RecordFieldIdentifier resultFieldIdentifier,
         std::shared_ptr<Nautilus::Interface::MemoryProvider::TupleBufferMemoryProvider> memProviderPagedVector);
     void lift(const nautilus::val<AggregationState*>& aggregationState, ExecutionContext& executionContext, const Nautilus::Record& record)
@@ -48,6 +48,9 @@ public:
     void cleanup(nautilus::val<AggregationState*> aggregationState) override;
 
 private:
+    PhysicalFunction lonFunction;
+    PhysicalFunction latFunction;
+    PhysicalFunction timestampFunction;
     std::shared_ptr<Nautilus::Interface::MemoryProvider::TupleBufferMemoryProvider> memProviderPagedVector;
 };
 
