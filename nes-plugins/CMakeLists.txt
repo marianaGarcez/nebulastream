@@ -19,11 +19,17 @@ include(${PROJECT_SOURCE_DIR}/cmake/PluginRegistrationUtil.cmake)
 activate_optional_plugin("Sources/TCPSource" ON)
 activate_optional_plugin("Sources/MQTTSource" ON)
 activate_optional_plugin("Sinks/MQTTSink" ON)
-activate_optional_plugin("ImageManip" ON)
-activate_optional_plugin("Inference/IREE" ON)
-activate_optional_plugin("Sources/GeneratorSource" ON)
-activate_optional_plugin("Sinks/VoidSink" ON)
-activate_optional_plugin("Sources/AudioSource" ON)
+<<<<<<< HEAD
+activate_optional_plugin("ImageManip" OFF)
+activate_optional_plugin("Inference/IREE" OFF)
+activate_optional_plugin("Sources/GeneratorSource" OFF)
+activate_optional_plugin("Sources/AudioSource" OFF)
+=======
+activate_optional_plugin("ImageManip" OFF)
+activate_optional_plugin("Inference/IREE" OFF)
+activate_optional_plugin("Sources/GeneratorSource" OFF)
+activate_optional_plugin("Sources/AudioSource" OFF)
+>>>>>>> 74674f9fe6 (Apply stashed changes from tutorial_fork)
 
 # MEOS is a dependency
 activate_optional_plugin("MEOS" ON)
