@@ -31,27 +31,13 @@ if (NES_ENABLE_MEOS)
     activate_optional_plugin("MEOS" ON)
     message(STATUS "Enable MEOS Plugin")
 
-    # Detect the platform
-    if (APPLE)
-        message(STATUS "Building on macOS")
-        # Set the include and library directories for Homebrew (macOS)
-        set(MEOS_INCLUDE_DIR "/opt/homebrew/include" CACHE PATH "Path to MEOS include directory")
-        set(MEOS_PLUGIN_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include" CACHE PATH "Path to MEOS plugin include directory")
-        include_directories(SYSTEM ${MEOS_INCLUDE_DIR} ${MEOS_PLUGIN_INCLUDE_DIR})
-        include_directories(SYSTEM ${MEOS_INCLUDE_DIR} ${MEOS_PLUGIN_INCLUDE_DIR})
-        link_directories(${MEOS_LIBRARY_DIR} )
-
+    # Find MEOS on all platforms using our Findmeos.cmake
+    find_package(meos REQUIRED)
+    if(meos_FOUND)
+        message(STATUS "MEOS found: include=${meos_INCLUDE_DIR}, library=${meos}")
+        include_directories(SYSTEM ${meos_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/MEOS/include)
     else()
-        message(STATUS "Building on Linux")
-
-        # Default behavior for Linux
-        find_package(meos REQUIRED)
-        if(meos_FOUND)
-            message(STATUS "MEOS found: include=${meos_INCLUDE_DIR}, library=${meos}")
-            include_directories(SYSTEM ${meos_INCLUDE_DIR})
-        else()
-            message(FATAL_ERROR "MEOS library not found")
-        endif()
+        message(FATAL_ERROR "MEOS library not found. Set MEOS_ROOT or CMAKE_PREFIX_PATH to the MEOS install prefix.")
     endif()
 else ()
     message(STATUS "MEOS Plugin disabled (-DNES_ENABLE_MEOS=OFF)")

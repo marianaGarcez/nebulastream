@@ -75,6 +75,18 @@ std::string CSVFormat::tupleBufferToFormattedCSVString(Memory::TupleBuffer tbuff
                               {
                                   const auto combined = *std::bit_cast<const uint64_t*>(&tuple[offset]);
                                   const auto str = MemoryLayout::readVarSizedDataAsString(tbuffer, VariableSizedAccess(combined));
+                                  // If the VARSIZED content is non-printable (binary), render as BINARY(<size>)
+                                  const bool isPrintable = std::ranges::all_of(
+                                      str,
+                                      [](unsigned char c)
+                                      {
+                                          // printable ASCII range excluding control characters
+                                          return c >= 32 && c <= 126;
+                                      });
+                                  if (!isPrintable)
+                                  {
+                                      return fmt::format("BINARY({})", str.size());
+                                  }
                                   if (copyOfEscapeStrings)
                                   {
                                       return "\"" + str + "\"";

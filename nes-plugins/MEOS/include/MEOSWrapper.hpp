@@ -18,10 +18,13 @@
 #include <string>
 #include <vector>
 
-namespace MEOS {
+// Require MEOS headers and C API
 extern "C" {
     #include <meos.h>
+    #include <meos_geo.h>
 }
+
+namespace MEOS {
 
 class Meos {
   public:
@@ -43,6 +46,7 @@ class Meos {
          */
         explicit SpatioTemporalBox(const std::string& wkt_string);
         ~SpatioTemporalBox();
+        STBox* getBox() const;
 
 
     private:
@@ -63,7 +67,6 @@ class Meos {
     class TemporalSequence {
     public:
         explicit TemporalSequence(double lon, double lat, int t_out);
-        
         // Constructor for creating trajectory from multiple points
         explicit TemporalSequence(const std::vector<TemporalInstant*>& instants);
         
@@ -87,7 +90,61 @@ class Meos {
         Temporal* sequence;
     };
 
-    std::string convertSecondsToTimestamp(long long seconds);
+    // New helpers and types used by MEOS-dependent code
+    // Forward declaration so TemporalGeometry can reference it in signatures
+    class StaticGeometry;
+
+    class TemporalGeometry {
+    public:
+        explicit TemporalGeometry(const std::string& wkt_string);
+        ~TemporalGeometry();
+        Temporal* getGeometry() const;
+
+        int intersects(const TemporalGeometry& geom) const;
+        int contains(const TemporalGeometry& geom) const;
+        int intersectsStatic(const StaticGeometry& static_geom) const;
+        int aintersects(const TemporalGeometry& geom) const;
+        int aintersectsStatic(const StaticGeometry& static_geom) const;
+        int containsStatic(const StaticGeometry& static_geom) const;
+
+    private:
+        Temporal* geometry{nullptr};
+    };
+
+    class StaticGeometry {
+    public:
+        explicit StaticGeometry(const std::string& wkt_string);
+        ~StaticGeometry();
+        GSERIALIZED* getGeometry() const;
+        int containsTemporal(const TemporalGeometry& temporal_geom) const;
+
+    private:
+        GSERIALIZED* geometry{nullptr};
+    };
+
+    class TemporalHolder {
+    public:
+        explicit TemporalHolder(Temporal* temporalPtr);
+        ~TemporalHolder();
+        Temporal* get() const;
+
+    private:
+        Temporal* temporal{nullptr};
+    };
+
+    static std::string convertSecondsToTimestamp(long long seconds);
+    static std::string convertEpochToTimestamp(unsigned long long epochLike);
+
+    static void* parseTemporalPoint(const std::string& trajStr);
+    static void freeTemporalObject(void* temporal);
+    static uint8_t* temporalToWKB(void* temporal, size_t& size);
+
+    static void ensureMeosInitialized();
+
+    static int safe_edwithin_tgeo_geo(const Temporal* temp, const GSERIALIZED* gs, double dist);
+    static int safe_eintersects_tgeo_geo(const Temporal* temp, const GSERIALIZED* gs);
+    static Temporal* safe_tgeo_at_stbox(const Temporal* temp, const STBox* box, bool border_inc);
+
     bool finalized=false;
 
 };

@@ -123,10 +123,23 @@ std::vector<std::shared_ptr<AggregationPhysicalFunction>> getAggregationPhysical
 
         auto aggregationInputFunction = QueryCompilation::FunctionProvider::lowerFunction(descriptor->onField);
         const auto resultFieldIdentifier = descriptor->asField.getFieldName();
-        auto layout = std::make_shared<ColumnLayout>(configuration.pageSize.getValue(), logicalOperator.getInputSchemas()[0]);
-        auto bufferRef = std::make_shared<Interface::BufferRef::ColumnTupleBufferRef>(layout);
-
         auto name = descriptor->getName();
+
+        // Choose appropriate memory provider: most aggs can use the input schema; TemporalSequence needs a compact schema
+        std::shared_ptr<Interface::BufferRef::TupleBufferRef> bufferRef;
+        if (name == "TemporalSequence")
+        {
+            Schema pagedSchema{Schema::MemoryLayoutType::ROW_LAYOUT};
+            pagedSchema.addField("value", DataTypeProvider::provideDataType(descriptor->getInputStamp().type));
+            auto layoutTS = std::make_shared<ColumnLayout>(NES::Configurations::DEFAULT_PAGED_VECTOR_SIZE, pagedSchema);
+            bufferRef = std::make_shared<Interface::BufferRef::ColumnTupleBufferRef>(layoutTS);
+        }
+        else
+        {
+            auto layoutDefault
+                = std::make_shared<ColumnLayout>(configuration.pageSize.getValue(), logicalOperator.getInputSchemas()[0]);
+            bufferRef = std::make_shared<Interface::BufferRef::ColumnTupleBufferRef>(layoutDefault);
+        }
         auto aggregationArguments = AggregationPhysicalFunctionRegistryArguments(
             std::move(physicalInputType),
             std::move(physicalFinalType),
@@ -140,29 +153,14 @@ std::vector<std::shared_ptr<AggregationPhysicalFunction>> getAggregationPhysical
         }
         else if (name == "TemporalSequence")
         {
-            // Cast to get access to the specific TemporalSequence fields
-            auto* temporalSeqDescriptor = dynamic_cast<const TemporalSequenceAggregationLogicalFunction*>(descriptor.get());
-            PRECONDITION(temporalSeqDescriptor, "Expected TemporalSequenceAggregationLogicalFunction but got different type");
-            
-            // Create physical functions for all three input fields
-            auto lonPhysicalFunction = QueryCompilation::FunctionProvider::lowerFunction(temporalSeqDescriptor->getLonField());
-            auto latPhysicalFunction = QueryCompilation::FunctionProvider::lowerFunction(temporalSeqDescriptor->getLatField());
-            auto timestampPhysicalFunction = QueryCompilation::FunctionProvider::lowerFunction(temporalSeqDescriptor->getTimestampField());
-            
-            // TEMPORAL_SEQUENCE outputs VARSIZED trajectory data
+            // Fallback path (should be unused if registry creates the function); keep for safety
             auto varsizedType = DataTypeProvider::provideDataType(DataType::Type::VARSIZED);
-            
-            // Create memory layout and provider for PagedVector
-            auto layout = std::make_shared<ColumnLayout>(
-                NES::Configurations::DEFAULT_PAGED_VECTOR_SIZE, logicalOperator.getInputSchemas()[0]);
-            auto memoryProvider = std::make_unique<Nautilus::Interface::BufferRef::ColumnTupleBufferRef>(layout);
-            
             aggregationPhysicalFunctions.emplace_back(std::make_shared<TemporalSequenceAggregationPhysicalFunction>(
-                std::move(varsizedType),       // Input type (VARSIZED for trajectory state)
-                std::move(physicalFinalType), // Result type (will be VARSIZED)
-                std::move(aggregationInputFunction), // Primary input function
+                std::move(varsizedType),
+                std::move(physicalFinalType),
+                std::move(aggregationInputFunction),
                 resultFieldIdentifier,
-                std::move(memoryProvider)));
+                std::dynamic_pointer_cast<Interface::BufferRef::ColumnTupleBufferRef>(bufferRef)));
         }
         else if (name == "Var")
         {

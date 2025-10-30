@@ -64,12 +64,42 @@ deserializeWindowAggregationFunction(const SerializableAggregationFunction& seri
     auto onField = deserializeFunction(serializedFunction.on_field());
     auto asField = deserializeFunction(serializedFunction.as_field());
 
+    // Default path: single-input aggregations encoded as on_field + as_field
     if (auto fieldAccess = onField.tryGet<FieldAccessLogicalFunction>())
     {
         if (auto asFieldAccess = asField.tryGet<FieldAccessLogicalFunction>())
         {
             AggregationLogicalFunctionRegistryArguments args;
-            args.fields = {fieldAccess.value(), asFieldAccess.value()};
+
+            // Special-case deserialization for TemporalSequence with extra inputs
+            if (type == std::string("TemporalSequence"))
+            {
+                const auto& onFieldProto = serializedFunction.on_field();
+                auto it = onFieldProto.config().find("temporal_sequence_inputs");
+                if (it == onFieldProto.config().end() || !it->second.has_function_list())
+                {
+                    throw UnknownLogicalOperator();
+                }
+                const auto& fnList = it->second.function_list();
+                if (fnList.functions_size() != 2)
+                {
+                    throw UnknownLogicalOperator();
+                }
+                // Deserialize lat and timestamp from the function list
+                auto latFn = deserializeFunction(fnList.functions(0));
+                auto tsFn = deserializeFunction(fnList.functions(1));
+                auto latAccess = latFn.tryGet<FieldAccessLogicalFunction>();
+                auto tsAccess = tsFn.tryGet<FieldAccessLogicalFunction>();
+                if (!latAccess || !tsAccess)
+                {
+                    throw UnknownLogicalOperator();
+                }
+                args.fields = {fieldAccess.value(), latAccess.value(), tsAccess.value(), asFieldAccess.value()};
+            }
+            else
+            {
+                args.fields = {fieldAccess.value(), asFieldAccess.value()};
+            }
 
             if (auto function = AggregationLogicalFunctionRegistry::instance().create(type, args))
             {

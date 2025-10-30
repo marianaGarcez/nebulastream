@@ -191,6 +191,8 @@ static constexpr auto DifferentialToken = "===="s;
 
 static const std::array stringToToken = std::to_array<std::pair<std::string_view, TokenType>>(
     {{CreateToken, TokenType::CREATE},
+     {SystestLogicalSourceToken, TokenType::LOGICAL_SOURCE},
+     {AttachSourceToken, TokenType::ATTACH_SOURCE},
      {QueryToken, TokenType::QUERY},
      {SinkToken, TokenType::SINK},
      {ModelToken, TokenType::MODEL},
@@ -816,12 +818,8 @@ std::string SystestParser::expectQuery(const std::unordered_set<TokenType>& stop
             {
                 if (stopTokens.contains(tokenType.value()))
                 {
-                    const auto trimmedQuerySoFar = Util::trimWhiteSpaces(std::string_view(queryString));
-
-                    if (trimmedQuerySoFar.back() != ';')
-                    {
-                        throw InvalidQuerySyntax("Queries must end with a semicolon: \"{}\"", trimmedQuerySoFar);
-                    }
+                    // Stop collecting the query when we hit the next section delimiter.
+                    // Do not require a trailing semicolon in the SLT input.
                     break;
                 }
             }

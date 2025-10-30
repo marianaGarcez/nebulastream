@@ -23,13 +23,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+set(_MEOS_HINTS $ENV{MEOS_ROOT} /usr/local /opt/homebrew /opt/local)
+
 find_path(meos_INCLUDE_DIR
         NAMES meos.h
-        PATHS /usr/local/include)
+        HINTS ${_MEOS_HINTS}
+        PATH_SUFFIXES include)
 
 find_library(meos NAMES meos
-        PATHS /usr/local/lib
-        )
+        HINTS ${_MEOS_HINTS}
+        PATH_SUFFIXES lib lib64)
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(meos

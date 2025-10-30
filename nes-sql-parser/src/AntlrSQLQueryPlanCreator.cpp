@@ -97,6 +97,24 @@ std::string parseIdentifier(AntlrSQLParser::IdentifierContext* identifier)
         "passed?");
     std::unreachable();
 }
+
+// Normalize identifiers that may be qualified as SOURCE$field.
+// - Upper-case the source part to match schema naming
+// - Keep field casing as typed, except map 'start'/'end' (any case) to 'START'/'END'
+static std::string normalizeQualifiedIdentifier(std::string text)
+{
+    const auto pos = text.find('$');
+    if (pos == std::string::npos)
+    {
+        return text;
+    }
+    const auto src = text.substr(0, pos);
+    const auto field = text.substr(pos + 1);
+    const auto fieldLower = Util::toLowerCase(field);
+    const bool isStartOrEnd = (fieldLower == "start" || fieldLower == "end");
+    const auto fieldNorm = isStartOrEnd ? Util::toUpperCase(fieldLower) : field;
+    return fmt::format("{}${}", Util::toUpperCase(src), fieldNorm);
+}
 }
 
 LogicalPlan AntlrSQLQueryPlanCreator::getQueryPlan() const
@@ -381,15 +399,18 @@ void AntlrSQLQueryPlanCreator::enterIdentifier(AntlrSQLParser::IdentifierContext
     }
     if (helpers.top().isGroupBy)
     {
-        helpers.top().groupByFields.emplace_back(parseIdentifier(context));
+        std::string text = normalizeQualifiedIdentifier(context->getText());
+        helpers.top().groupByFields.emplace_back(std::move(text));
     }
     else if (
         (helpers.top().isWhereOrHaving || helpers.top().isSelect || helpers.top().isWindow) && !helpers.top().isInferModelInput
         && AntlrSQLParser::RulePrimaryExpression == parentRuleIndex)
     {
         /// add identifiers in select, window, where and having clauses to the function builder list
-        /// if inference is in select, ignore the model input fields
-        helpers.top().functionBuilder.emplace_back(FieldAccessLogicalFunction(context->getText()));
+        /// keep original token text (avoid premature qualification to allow aliases/start/end)
+        /// but normalize fully-qualified SOURCE$FIELD to upper-case source for schema matching
+        std::string text = normalizeQualifiedIdentifier(context->getText());
+        helpers.top().functionBuilder.emplace_back(FieldAccessLogicalFunction(std::move(text)));
     }
     else if (helpers.top().isFrom and not helpers.top().isJoinRelation and AntlrSQLParser::RuleErrorCapturingIdentifier == parentRuleIndex)
     {
@@ -429,10 +450,11 @@ void AntlrSQLQueryPlanCreator::enterIdentifier(AntlrSQLParser::IdentifierContext
     }
     else if (helpers.top().isInferModelInput)
     {
+        std::string text = normalizeQualifiedIdentifier(context->getText());
         if (helpers.top().isInFunctionCall())
-            helpers.top().functionBuilder.push_back(FieldAccessLogicalFunction(context->getText()));
+            helpers.top().functionBuilder.push_back(FieldAccessLogicalFunction(text));
         else
-            helpers.top().inferModelInputs.push_back(FieldAccessLogicalFunction(context->getText()));
+            helpers.top().inferModelInputs.push_back(FieldAccessLogicalFunction(text));
     }
     else if (helpers.top().isJoinRelation and AntlrSQLParser::RulePrimaryExpression == parentRuleIndex)
     {
@@ -597,8 +619,23 @@ void AntlrSQLQueryPlanCreator::exitTumblingWindow(AntlrSQLParser::TumblingWindow
     }
     else
     {
+        // Qualify the timestamp with the current source to match schema field naming
+        // If the timestamp is already qualified (contains '$'), preserve its source and only normalize casing
+        std::string qualifiedTs;
+        const auto& tsIdent = helpers.top().timestamp;
+        const auto pos = tsIdent.find('$');
+        if (pos != std::string::npos)
+        {
+            const auto src = tsIdent.substr(0, pos);
+            const auto field = tsIdent.substr(pos + 1);
+            qualifiedTs = fmt::format("{}${}", src, Util::toLowerCase(field));
+        }
+        else
+        {
+            qualifiedTs = fmt::format("{}${}", helpers.top().getSource(), Util::toLowerCase(tsIdent));
+        }
         helpers.top().windowType = std::make_shared<Windowing::TumblingWindow>(
-            Windowing::TimeCharacteristic::createEventTime(FieldAccessLogicalFunction(helpers.top().timestamp)), timeMeasure);
+            Windowing::TimeCharacteristic::createEventTime(FieldAccessLogicalFunction(qualifiedTs)), timeMeasure);
     }
     AntlrSQLBaseListener::exitTumblingWindow(context);
 }
@@ -614,10 +651,21 @@ void AntlrSQLQueryPlanCreator::exitSlidingWindow(AntlrSQLParser::SlidingWindowCo
     }
     else
     {
+        std::string qualifiedTs;
+        const auto& tsIdent = helpers.top().timestamp;
+        const auto pos = tsIdent.find('$');
+        if (pos != std::string::npos)
+        {
+            const auto src = tsIdent.substr(0, pos);
+            const auto field = tsIdent.substr(pos + 1);
+            qualifiedTs = fmt::format("{}${}", src, Util::toLowerCase(field));
+        }
+        else
+        {
+            qualifiedTs = fmt::format("{}${}", helpers.top().getSource(), Util::toLowerCase(tsIdent));
+        }
         helpers.top().windowType = Windowing::SlidingWindow::of(
-            Windowing::TimeCharacteristic::createEventTime(FieldAccessLogicalFunction(helpers.top().timestamp)),
-            timeMeasure,
-            slidingLength);
+            Windowing::TimeCharacteristic::createEventTime(FieldAccessLogicalFunction(qualifiedTs)), timeMeasure, slidingLength);
     }
     AntlrSQLBaseListener::exitSlidingWindow(context);
 }
@@ -695,9 +743,26 @@ void AntlrSQLQueryPlanCreator::exitComparison(AntlrSQLParser::ComparisonContext*
     }
     else
     {
+        // Ensure we have two operands in functionBuilder; convert constants if needed
         if (helpers.top().functionBuilder.size() < 2)
         {
-            throw InvalidQuerySyntax("Comparison requires two parameters, got {}", context->getText());
+            // If there is exactly one function and one constant, wrap the constant into a logical function
+            if (helpers.top().functionBuilder.size() + helpers.top().constantBuilder.size() == 2)
+            {
+                // Heuristic: treat numeric literals as FLOAT64, others as UINT64 if they match integer
+                auto value = helpers.top().constantBuilder.back();
+                helpers.top().constantBuilder.pop_back();
+                // Simple check for a decimal point to pick float
+                const bool isFloat = value.find('.') != std::string::npos || value.find('e') != std::string::npos
+                    || value.find('E') != std::string::npos;
+                const auto dtype = isFloat ? DataType::Type::FLOAT64 : DataType::Type::UINT64;
+                auto constFunctionItem = ConstantValueLogicalFunction(DataTypeProvider::provideDataType(dtype), std::move(value));
+                helpers.top().functionBuilder.emplace_back(constFunctionItem);
+            }
+            if (helpers.top().functionBuilder.size() < 2)
+            {
+                throw InvalidQuerySyntax("Comparison requires two parameters, got {}", context->getText());
+            }
         }
         const auto rightFunction = helpers.top().functionBuilder.back();
         helpers.top().functionBuilder.pop_back();
@@ -965,6 +1030,8 @@ void AntlrSQLQueryPlanCreator::exitFunctionCall(AntlrSQLParser::FunctionCallCont
                     TemporalSequenceAggregationLogicalFunction::create(longitudeFunction.get<FieldAccessLogicalFunction>(),
                                                                       latitudeFunction.get<FieldAccessLogicalFunction>(),
                                                                       timestampFunction.get<FieldAccessLogicalFunction>()));
+                // Keep a representative field on the functionBuilder (similar to single-arg aggs)
+                helpers.top().functionBuilder.emplace_back(longitudeFunction);
             }
             break;
         default:

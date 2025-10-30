@@ -592,8 +592,9 @@ BRACKETED_COMMENT
     : '/*' {!isHint()}? (BRACKETED_COMMENT|.)*? '*/' -> channel(HIDDEN)
     ;
 
+// Allow $ in identifiers to support SOURCE$FIELD references used by the engine
 IDENTIFIER
-    : LETTER (LETTER | DIGIT | '_')*
+    : LETTER (LETTER | DIGIT | '_' | '$')*
     ;
 
 /// Catch-all for anything we can't recognize.

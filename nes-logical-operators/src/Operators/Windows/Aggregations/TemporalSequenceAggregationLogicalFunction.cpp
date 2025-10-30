@@ -119,6 +119,13 @@ NES::SerializableAggregationFunction TemporalSequenceAggregationLogicalFunction:
     // Serialize the longitude field as the primary "on_field"
     auto lonFieldSerialized = SerializableFunction();
     lonFieldSerialized.CopyFrom(lonField.serialize());
+    // Encode additional required inputs (lat, timestamp) inside the on_field config as a FunctionList
+    FunctionList extraInputs;
+    *extraInputs.add_functions() = latField.serialize();
+    *extraInputs.add_functions() = timestampField.serialize();
+    SerializableVariantDescriptor extraVar;
+    extraVar.mutable_function_list()->CopyFrom(extraInputs);
+    (*lonFieldSerialized.mutable_config())["temporal_sequence_inputs"] = extraVar;
     serializedAggregationFunction.mutable_on_field()->CopyFrom(lonFieldSerialized);
 
     // Serialize the result field 
@@ -126,9 +133,7 @@ NES::SerializableAggregationFunction TemporalSequenceAggregationLogicalFunction:
     asFieldSerialized.CopyFrom(asField.serialize());
     serializedAggregationFunction.mutable_as_field()->CopyFrom(asFieldSerialized);
 
-    // Store additional fields in custom configuration
-    // Note: In a complete implementation, you'd extend the protobuf to support multiple fields
-    // For now, we'll document the limitation that full serialization requires protobuf extension
+    // Additional inputs (lat, timestamp) are serialized in on_field.config["temporal_sequence_inputs"]
     
     return serializedAggregationFunction;
 }

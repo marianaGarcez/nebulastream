@@ -59,6 +59,7 @@
 #include <LegacyOptimizer.hpp>
 #include <SystestParser.hpp>
 #include <SystestState.hpp>
+#include <SystestState.hpp>
 
 namespace NES::Systest
 {
@@ -168,9 +169,13 @@ public:
             getOperatorByType<SourceDescriptorLogicalOperator>(*this->optimizedPlan),
             [&sourceNamesToFilepathAndCountForQuery](const auto& logicalSourceOperator)
             {
-                if (const auto path
-                    = logicalSourceOperator->getSourceDescriptor().template tryGetFromConfig<std::string>(std::string{"file_path"});
-                    path.has_value())
+                // Prefer modern camelCase key; fall back to legacy snake_case
+                auto path = logicalSourceOperator->getSourceDescriptor().template tryGetFromConfig<std::string>(std::string{"filePath"});
+                if (!path.has_value())
+                {
+                    path = logicalSourceOperator->getSourceDescriptor().template tryGetFromConfig<std::string>(std::string{"file_path"});
+                }
+                if (path.has_value())
                 {
                     if (auto entry = sourceNamesToFilepathAndCountForQuery.extract(logicalSourceOperator->getSourceDescriptor());
                         entry.empty())
@@ -675,6 +680,106 @@ struct SystestBinder::Impl
         {
             throw TestException("Could not successfully load test file://{}", testFilePath.string());
         }
+
+        /// Register callbacks for SINK/SOURCE/ATTACH sections
+        parser.registerOnSystestSinkCallback(
+            [&](const SystestParser::SystestSink& sinkParsed)
+            {
+                Schema schema{Schema::MemoryLayoutType::ROW_LAYOUT};
+                for (const auto& [type, name] : sinkParsed.fields)
+                {
+                    schema.addField(name, type);
+                }
+                // Use File sink by default for SLT SINK blocks; key by upper-case name to match later lookup
+                sltSinkProvider.registerSink("File", Util::toUpperCase(sinkParsed.name), schema);
+            });
+
+        parser.registerOnSystestLogicalSourceCallback(
+            [&](const SystestParser::SystestLogicalSource& source)
+            {
+                Schema schema{Schema::MemoryLayoutType::ROW_LAYOUT};
+                for (const auto& [type, name] : source.fields)
+                {
+                    schema.addField(name, type);
+                }
+                // Register logical source under original and upper-case names to match SQL parser behavior
+                const auto originalName = source.name;
+                const auto upperName = Util::toUpperCase(source.name);
+                if (!sourceCatalog->addLogicalSource(originalName, schema).has_value())
+                {
+                    throw SourceAlreadyExists("{}", originalName);
+                }
+                // Ignore duplicate error if names are equal (already upper-case)
+                if (upperName != originalName)
+                {
+                    (void)sourceCatalog->addLogicalSource(upperName, schema);
+                }
+            });
+
+        // Minimal ATTACH support for INLINE/FILE test data
+        parser.registerOnSystestAttachSourceCallback(
+            [&](SystestAttachSource attachSource)
+            {
+                static uint64_t sourceIndex = 0;
+
+                NES::PhysicalSourceConfig physicalSourceConfig{
+                    .logical = attachSource.logicalSourceName,
+                    .type = attachSource.sourceType,
+                    .parserConfig = std::unordered_map<std::string, std::string>{{"type", attachSource.inputFormatterType}},
+                    // FileSource registries expect a pre-existing key 'filePath' to overwrite.
+                    .sourceConfig = std::unordered_map<std::string, std::string>{{"filePath", std::string{}}}};
+
+                switch (attachSource.testDataIngestionType)
+                {
+                    case TestDataIngestionType::INLINE: {
+                        if (!attachSource.tuples.empty())
+                        {
+                            const auto sourceFile = SystestQuery::sourceFile(workingDir, testFileName, sourceIndex++);
+                            physicalSourceConfig = NES::SourceDataProvider::provideInlineDataSource(
+                                std::move(physicalSourceConfig), attachSource.tuples, sourceThreads, sourceFile);
+                        }
+                        else
+                        {
+                            throw CannotLoadConfig("An InlineData source must have tuples, but tuples was empty.");
+                        }
+                        break;
+                    }
+                    case TestDataIngestionType::FILE: {
+                        if (!attachSource.fileDataPath.has_value())
+                        {
+                            throw CannotLoadConfig("Attach FILE must be followed by a valid file path.");
+                        }
+                        physicalSourceConfig = NES::SourceDataProvider::provideFileDataSource(
+                            std::move(physicalSourceConfig), sourceThreads, attachSource.fileDataPath.value());
+                        break;
+                    }
+                    case TestDataIngestionType::GENERATOR: {
+                        throw CannotLoadConfig("Generator attach is not supported in this systest binder.");
+                    }
+                }
+
+                const auto originalName = attachSource.logicalSourceName;
+                const auto upperName = Util::toUpperCase(originalName);
+                bool attachedAny = false;
+                if (const auto logicalSource = sourceCatalog->getLogicalSource(originalName))
+                {
+                    attachedAny |= static_cast<bool>(sourceCatalog->addPhysicalSource(
+                        logicalSource.value(), physicalSourceConfig.type, physicalSourceConfig.sourceConfig, physicalSourceConfig.parserConfig));
+                }
+                if (upperName != originalName)
+                {
+                    if (const auto upperLogical = sourceCatalog->getLogicalSource(upperName))
+                    {
+                        // Attach a physical source for the upper-case alias as well
+                        attachedAny |= static_cast<bool>(sourceCatalog->addPhysicalSource(
+                            upperLogical.value(), physicalSourceConfig.type, physicalSourceConfig.sourceConfig, physicalSourceConfig.parserConfig));
+                    }
+                }
+                if (!attachedAny)
+                {
+                    throw UnknownSourceName("Failed to attach physical source to logical source: {}", originalName);
+                }
+            });
 
         /// We create a new query plan from our config when finding a query
         SystestQueryId lastParsedQueryId = INVALID_SYSTEST_QUERY_ID;

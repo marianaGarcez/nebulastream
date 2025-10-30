@@ -10,6 +10,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Ensure MEOS is located for this subdirectory
+find_package(meos REQUIRED)
+
 # Create MEOS plugin library
 add_library(nes-meos STATIC MEOSWrapper.cpp)
 
@@ -17,15 +20,11 @@ add_library(nes-meos STATIC MEOSWrapper.cpp)
 target_include_directories(nes-meos
         PUBLIC include
         PUBLIC .
+        PUBLIC ${meos_INCLUDE_DIR}
 )
 
 # Link with MEOS library using the imported target
-if(TARGET meos::meos)
-    target_link_libraries(nes-meos PUBLIC meos::meos)
-else()
-    target_link_libraries(nes-meos PUBLIC ${meos})
-    target_include_directories(nes-meos PUBLIC ${meos_INCLUDE_DIR})
-endif()
+target_link_libraries(nes-meos PUBLIC meos::meos)
 
 # Link with NebulaStream dependencies  
 target_link_libraries(nes-meos PUBLIC nes-common nes-data-types)
