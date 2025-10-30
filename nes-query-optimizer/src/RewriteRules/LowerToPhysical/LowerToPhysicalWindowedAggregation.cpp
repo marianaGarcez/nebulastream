@@ -112,7 +112,7 @@ static std::unique_ptr<TimeFunction> getTimeFunction(const WindowedAggregationLo
 namespace
 {
 std::vector<std::shared_ptr<AggregationPhysicalFunction>> getAggregationPhysicalFunctions(
-    const WindowedAggregationLogicalOperator& logicalOperator, const NES::Configurations::QueryOptimizerConfiguration& configuration)
+    const WindowedAggregationLogicalOperator& logicalOperator, const QueryExecutionConfiguration& configuration)
 {
     std::vector<std::shared_ptr<AggregationPhysicalFunction>> aggregationPhysicalFunctions;
     const auto& aggregationDescriptors = logicalOperator.getWindowAggregation();
@@ -153,9 +153,9 @@ std::vector<std::shared_ptr<AggregationPhysicalFunction>> getAggregationPhysical
             auto varsizedType = DataTypeProvider::provideDataType(DataType::Type::VARSIZED);
             
             // Create memory layout and provider for PagedVector
-            auto layout = std::make_shared<Memory::MemoryLayouts::ColumnLayout>(
+            auto layout = std::make_shared<ColumnLayout>(
                 NES::Configurations::DEFAULT_PAGED_VECTOR_SIZE, logicalOperator.getInputSchemas()[0]);
-            auto memoryProvider = std::make_unique<Nautilus::Interface::MemoryProvider::ColumnTupleBufferMemoryProvider>(layout);
+            auto memoryProvider = std::make_unique<Nautilus::Interface::BufferRef::ColumnTupleBufferRef>(layout);
             
             aggregationPhysicalFunctions.emplace_back(std::make_shared<TemporalSequenceAggregationPhysicalFunction>(
                 std::move(varsizedType),       // Input type (VARSIZED for trajectory state)
@@ -200,7 +200,8 @@ RewriteRuleResultSubgraph LowerToPhysicalWindowedAggregation::apply(LogicalOpera
     auto handlerId = getNextOperatorHandlerId();
     auto outputSchema = aggregation.getOutputSchema();
     auto outputOriginId = outputOriginIds[0];
-    auto inputOriginIds = inputOriginIdsOpt.value();
+    auto inputOriginIdsTrait = inputOriginIdsOpt.value();
+    std::vector<OriginId> inputOriginIds(inputOriginIdsTrait.begin(), inputOriginIdsTrait.end());
     auto timeFunction = getTimeFunction(*aggregation);
     auto windowType = std::dynamic_pointer_cast<Windowing::TimeBasedWindowType>(aggregation->getWindowType());
     INVARIANT(windowType != nullptr, "Window type must be a time-based window type");
@@ -251,9 +252,9 @@ RewriteRuleResultSubgraph LowerToPhysicalWindowedAggregation::apply(LogicalOpera
         numberOfBuckets);
 
     auto sliceAndWindowStore = std::make_unique<DefaultTimeBasedSliceStore>(
-        windowType->getSize().getTime(), windowType->getSlide().getTime(), inputOriginIds.size());
+        windowType->getSize().getTime(), windowType->getSlide().getTime());
     auto handler = std::make_shared<AggregationOperatorHandler>(
-        inputOriginIds, outputOriginId, std::move(sliceAndWindowStore), aggregation.requiresSequentialAggregation());
+        inputOriginIds, outputOriginId, std::move(sliceAndWindowStore), aggregation->requiresSequentialAggregation());
     auto build = AggregationBuildPhysicalOperator(handlerId, std::move(timeFunction), aggregationPhysicalFunctions, hashMapOptions);
     auto probe = AggregationProbePhysicalOperator(hashMapOptions, aggregationPhysicalFunctions, handlerId, windowMetaData);
 

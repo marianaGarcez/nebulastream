@@ -63,7 +63,9 @@ TupleBufferRef::loadValue(const DataType& physicalType, const RecordBuffer& reco
         },
         recordBuffer.getReference(),
         combinedIdxOffset);
-    return VariableSizedData(varSizedPtr);
+    // Cast byte* to int8_t* and construct a non-owned VariableSizedData wrapper
+    auto varSizedInt8Ptr = static_cast<nautilus::val<int8_t*>>(varSizedPtr);
+    return VariableSizedData(varSizedInt8Ptr, VariableSizedData::Owned(nautilus::val<bool>{false}));
 }
 
 VarVal TupleBufferRef::storeValue(

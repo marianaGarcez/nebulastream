@@ -31,10 +31,25 @@ SourceHandle::SourceHandle(
     OriginId originId,
     SourceRuntimeConfiguration configuration,
     std::shared_ptr<AbstractBufferProvider> bufferPool,
-    std::unique_ptr<Source> sourceImplementation)
+    std::unique_ptr<Sources::Source> sourceImplementation)
     : configuration(std::move(configuration))
 {
-    this->sourceThread = std::make_unique<SourceThread>(std::move(originId), std::move(bufferPool), std::move(sourceImplementation));
+    this->sourceThread = std::make_unique<SourceThread>(
+        std::move(originId),
+        std::static_pointer_cast<Memory::AbstractPoolProvider>(std::move(bufferPool)),
+        this->configuration.inflightBufferLimit,
+        std::move(sourceImplementation));
+}
+
+SourceHandle::SourceHandle(
+    OriginId originId,
+    std::shared_ptr<Memory::AbstractPoolProvider> bufferPool,
+    size_t numOfLocalBuffers,
+    std::unique_ptr<Sources::Source> sourceImplementation)
+    : configuration(SourceRuntimeConfiguration{.inflightBufferLimit = numOfLocalBuffers})
+{
+    this->sourceThread = std::make_unique<SourceThread>(
+        std::move(originId), std::move(bufferPool), numOfLocalBuffers, std::move(sourceImplementation));
 }
 
 SourceHandle::~SourceHandle() = default;

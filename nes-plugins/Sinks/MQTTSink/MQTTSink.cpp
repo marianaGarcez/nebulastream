@@ -30,6 +30,7 @@
 #include <Sinks/Sink.hpp>
 #include <Sinks/SinkDescriptor.hpp>
 #include <SinksParsing/JSONFormat.hpp>
+#include <SinksParsing/CSVFormat.hpp>
 #include <ErrorHandling.hpp>
 #include <PipelineExecutionContext.hpp>
 #include <SinkRegistry.hpp>
@@ -47,11 +48,11 @@ MQTTSink::MQTTSink(const SinkDescriptor& sinkDescriptor)
 {
     switch (const auto inputFormat = sinkDescriptor.getFromConfig(ConfigParametersMQTT::INPUT_FORMAT))
     {
-        case Configurations::InputFormat::CSV:
-            formatter = std::make_unique<CSVFormat>(sinkDescriptor.schema);
+        case InputFormat::CSV:
+            formatter = std::make_unique<CSVFormat>(*sinkDescriptor.getSchema());
             break;
-        case Configurations::InputFormat::JSON:
-            formatter = std::make_unique<JSONFormat>(sinkDescriptor.schema);
+        case InputFormat::JSON:
+            formatter = std::make_unique<JSONFormat>(*sinkDescriptor.getSchema());
             break;
         default:
             throw UnknownSinkFormat(fmt::format("Sink format: {} not supported.", magic_enum::enum_name(inputFormat)));

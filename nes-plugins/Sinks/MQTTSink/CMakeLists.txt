@@ -22,6 +22,14 @@ target_include_directories(mqtt_sink_validation_plugin_library
         PRIVATE .
 )
 
-find_package(PahoMqttCpp CONFIG REQUIRED)
-target_link_libraries(mqtt_sink_plugin_library PRIVATE PahoMqttCpp::paho-mqttpp3-static)
-target_link_libraries(mqtt_sink_validation_plugin_library PRIVATE PahoMqttCpp::paho-mqttpp3-static)
+find_package(paho-mqttpp3 CONFIG REQUIRED)
+# Link to the correct vcpkg target; prefer shared if available
+if (TARGET paho-mqttpp3::paho-mqttpp3)
+    target_link_libraries(mqtt_sink_plugin_library PRIVATE paho-mqttpp3::paho-mqttpp3)
+    target_link_libraries(mqtt_sink_validation_plugin_library PRIVATE paho-mqttpp3::paho-mqttpp3)
+elseif (TARGET paho-mqttpp3::paho-mqttpp3-static)
+    target_link_libraries(mqtt_sink_plugin_library PRIVATE paho-mqttpp3::paho-mqttpp3-static)
+    target_link_libraries(mqtt_sink_validation_plugin_library PRIVATE paho-mqttpp3::paho-mqttpp3-static)
+else ()
+    message(FATAL_ERROR "paho-mqttpp3 package found, but no known targets are available.")
+endif ()

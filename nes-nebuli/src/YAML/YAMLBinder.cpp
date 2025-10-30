@@ -15,6 +15,8 @@
 #include <YAML/YAMLBinder.hpp>
 
 #include <istream>
+#include <algorithm>
+#include <ranges>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -27,6 +29,7 @@
 #include <Plans/LogicalPlan.hpp>
 #include <SQLQueryParser/AntlrSQLQueryParser.hpp>
 #include <Sinks/SinkDescriptor.hpp>
+#include <Operators/Sinks/SinkLogicalOperator.hpp>
 #include <Sources/LogicalSource.hpp>
 #include <Sources/SourceCatalog.hpp> /// NOLINT(misc-include-cleaner)
 #include <Sources/SourceDescriptor.hpp>
@@ -228,30 +231,26 @@ BoundQueryConfig YAMLBinder::parseAndBind(std::istream& inputStream)
         auto [queryString, unboundSinks, unboundLogicalSources, unboundPhysicalSources, unboundModels]
             = YAML::Load(inputStream).as<QueryConfig>();
         plan = AntlrSQLQueryParser::createLogicalQueryPlanFromSQLString(queryString);
-        const auto sinkOperators = plan.rootOperators;
+        const auto sinkOperators = plan.getRootOperators();
         if (sinkOperators.size() != 1)
         {
             throw QueryInvalid(
                 "NebulaStream currently only supports a single sink per query, but the query contains: {}", sinkOperators.size());
         }
-        auto sinkOperator = sinkOperators.at(0).tryGet<SinkLogicalOperator>();
+        auto sinkOperator = sinkOperators.at(0).tryGetAs<SinkLogicalOperator>();
         INVARIANT(sinkOperator.has_value(), "Root operator in plan was not sink");
 
-        if (const auto foundSink = unboundSinks.find(sinkOperator->sinkName); foundSink != unboundSinks.end())
-        {
-            auto validatedSinkConfig = Sinks::SinkDescriptor::validateAndFormatConfig(foundSink->second.type, foundSink->second.config);
-            auto sinkDescriptor = std::make_shared<Sinks::SinkDescriptor>(foundSink->second.type, std::move(validatedSinkConfig), false);
-            sinkOperator->sinkDescriptor = sinkDescriptor;
-            sinks = std::unordered_map{std::make_pair(foundSink->second.name, sinkDescriptor)};
-        }
-        else
+        // Find sink by name in the vector of unbound sinks
+        const auto sinkName = (*sinkOperator)->getSinkName();
+        auto foundIt = std::find_if(unboundSinks.begin(), unboundSinks.end(), [&](const auto& s) { return s.name == sinkName; });
+        if (foundIt == unboundSinks.end())
         {
             throw UnknownSinkType(
                 "Sinkname {} not specified in the configuration {}",
-                sinkOperator->sinkName,
-                fmt::join(std::ranges::views::keys(sinks), ","));
+                sinkName,
+                fmt::join(unboundSinks | std::views::transform([](const auto& s) { return s.name; }), ","));
         }
-        plan.rootOperators.at(0) = *sinkOperator;
+        // Keep sink operator unchanged here and proceed with binding sources/models
         logicalSources = bindRegisterLogicalSources(unboundLogicalSources);
         physicalSources = bindRegisterPhysicalSources(unboundPhysicalSources);
         models = bindRegisterModels(unboundModels);

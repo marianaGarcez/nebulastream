@@ -44,10 +44,17 @@ class SourceHandle
 {
 public:
     explicit SourceHandle(
-        OriginId originId, /// Todo #241: Rethink use of originId for sources, use new identifier for unique identification.
+        OriginId originId,
         SourceRuntimeConfiguration configuration,
         std::shared_ptr<AbstractBufferProvider> bufferPool,
-        std::unique_ptr<Source> sourceImplementation);
+        std::unique_ptr<Sources::Source> sourceImplementation);
+
+    // Back-compat overload used by tests/util
+    explicit SourceHandle(
+        OriginId originId,
+        std::shared_ptr<Memory::AbstractPoolProvider> bufferPool,
+        size_t numOfLocalBuffers,
+        std::unique_ptr<Sources::Source> sourceImplementation);
 
     ~SourceHandle();
 
@@ -73,3 +80,6 @@ private:
 }
 
 FMT_OSTREAM(NES::SourceHandle);
+
+// Provide alias in NES::Sources for legacy includes
+namespace NES::Sources { using SourceHandle = ::NES::SourceHandle; }

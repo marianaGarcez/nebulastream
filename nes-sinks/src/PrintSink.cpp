@@ -47,9 +47,6 @@ PrintSink::PrintSink(const SinkDescriptor& sinkDescriptor) : outputStream(&std::
         case InputFormat::JSON:
             outputParser = std::make_unique<JSONFormat>(*sinkDescriptor.getSchema());
             break;
-        case Configurations::InputFormat::JSON:
-            outputParser = std::make_unique<JSONFormat>(sinkDescriptor.schema);
-            break;
         default:
             throw UnknownSinkFormat(fmt::format("Sink format: {} not supported.", magic_enum::enum_name(inputFormat)));
     }

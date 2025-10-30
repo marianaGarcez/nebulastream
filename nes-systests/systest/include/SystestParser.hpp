@@ -36,6 +36,9 @@ namespace NES::Systest
 {
 using namespace std::literals;
 
+// Bring attach-source type into this namespace for parser signatures
+using ::NES::SystestAttachSource;
+
 /// Tokens ///
 enum class TokenType : uint8_t
 {
@@ -54,7 +57,8 @@ enum class TokenType : uint8_t
 enum class TestDataIngestionType : uint8_t
 {
     INLINE,
-    FILE
+    FILE,
+    GENERATOR
 };
 
 /// Assures that the number of parsed queries matches the number of parsed results
@@ -157,7 +161,7 @@ public:
     using SystestAttachSourceCallback = std::function<void(SystestAttachSource attachSource)>;
     using ModelCallback = std::function<void(Nebuli::Inference::ModelDescriptor&&)>;
     using SystestSinkCallback = std::function<void(SystestSink&&)>;
-    using ErrorExpectationCallback = std::function<void(const ErrorExpectation&)>;
+    using ErrorExpectationCallback = std::function<void(const ErrorExpectation&, SystestQueryId)>;
     using DifferentialQueryBlockCallback
         = std::function<void(std::string, std::string, SystestQueryId correspondingQueryId, SystestQueryId diffQueryId)>;
     using CreateCallback = std::function<void(std::string, std::optional<std::pair<TestDataIngestionType, std::vector<std::string>>>)>;
@@ -204,7 +208,6 @@ private:
     SystestLogicalSourceCallback onSystestLogicalSourceCallback;
     SystestAttachSourceCallback onAttachSourceCallback;
     SystestSinkCallback onSystestSinkCallback;
->>>>>>> df25c19ee3 (feat(Inference): Adds Inference Support)
     ErrorExpectationCallback onErrorExpectationCallback;
     CreateCallback onCreateCallback;
     DifferentialQueryBlockCallback onDifferentialQueryBlockCallback;
@@ -215,6 +218,8 @@ private:
     bool shouldRevisitCurrentLine = false;
     size_t currentLine = 0;
     std::vector<std::string> lines;
+    // Track defined logical source names to validate ATTACH statements
+    std::unordered_set<std::string> seenLogicalSourceNames;
 };
 }
 

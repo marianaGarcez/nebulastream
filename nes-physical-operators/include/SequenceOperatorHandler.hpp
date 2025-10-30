@@ -29,7 +29,7 @@ class SequenceOperatorHandler final : public OperatorHandler
 public:
     SequenceOperatorHandler() = default;
 
-    std::optional<Memory::TupleBuffer*> getNextBuffer(uint8_t* buffer);
+    std::optional<Memory::TupleBuffer*> getNextBuffer(Memory::TupleBuffer* buffer);
     std::optional<Memory::TupleBuffer*> markBufferAsDone(Memory::TupleBuffer* buffer);
 
     void start(PipelineExecutionContext&, uint32_t) override { sequencer = {}; }

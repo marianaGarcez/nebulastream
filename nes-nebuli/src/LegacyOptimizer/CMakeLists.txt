@@ -20,5 +20,10 @@ add_source_files(nes-legacy-optimizer
         TypeInferencePhase.cpp
         SinkBindingRule.cpp
         LegacyOptimizer.cpp
-        ModelInferenceCompilationRule.cpp
 )
+
+# Only compile model inference rule when inference is enabled
+if (NES_ENABLE_INFERENCE)
+    add_source_files(nes-legacy-optimizer
+            ModelInferenceCompilationRule.cpp)
+endif ()

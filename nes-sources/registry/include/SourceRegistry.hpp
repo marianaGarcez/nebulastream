@@ -24,7 +24,7 @@
 namespace NES
 {
 
-using SourceRegistryReturnType = std::unique_ptr<Source>;
+using SourceRegistryReturnType = std::unique_ptr<Sources::Source>;
 
 struct SourceRegistryArguments
 {

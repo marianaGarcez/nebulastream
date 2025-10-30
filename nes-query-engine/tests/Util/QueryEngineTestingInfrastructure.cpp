@@ -55,6 +55,8 @@
 
 namespace NES::Testing
 {
+using NES::Sources::getTestSource;
+using NES::Sources::TestSourceControl;
 
 std::vector<std::byte> identifiableData(size_t identifier)
 {

@@ -29,12 +29,41 @@ find_package(replxx CONFIG REQUIRED)
 
 target_include_directories(nes-nebuli-lib
         PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/private>)
+        PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/private>
+        # Always expose nes-inference headers for types used in headers (ModelCatalog, operators)
+        PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../nes-inference/include>)
 
-target_link_libraries(nes-nebuli-lib
-        PUBLIC nes-logical-operators nes-inference
-        PRIVATE nes-sql-parser yaml-cpp::yaml-cpp
-)
+target_include_directories(nes-nebuli-embedded-lib
+        PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/private>
+        PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../nes-inference/include>
+        PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../nes-single-node-worker/include>
+        PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../nes-query-compiler/include>)
+
+if (NES_ENABLE_INFERENCE)
+    target_link_libraries(nes-nebuli-lib
+            PUBLIC nes-logical-operators nes-inference nes-sql-parser
+            PRIVATE yaml-cpp::yaml-cpp
+    )
+else ()
+    target_link_libraries(nes-nebuli-lib
+            PUBLIC nes-logical-operators nes-sql-parser
+            PRIVATE yaml-cpp::yaml-cpp
+    )
+endif ()
+
+# Mirror link dependencies for embedded lib
+if (NES_ENABLE_INFERENCE)
+    target_link_libraries(nes-nebuli-embedded-lib
+            PUBLIC nes-logical-operators nes-inference nes-sql-parser
+            PRIVATE yaml-cpp::yaml-cpp
+    )
+else ()
+    target_link_libraries(nes-nebuli-embedded-lib
+            PUBLIC nes-logical-operators nes-sql-parser
+            PRIVATE yaml-cpp::yaml-cpp
+    )
+endif ()
 
 add_executable(nes-nebuli src/NebuLIStarter.cpp src/Repl.cpp)
 # Nebuli loads a Query using `dlopen` this requires the executable to be dynamic

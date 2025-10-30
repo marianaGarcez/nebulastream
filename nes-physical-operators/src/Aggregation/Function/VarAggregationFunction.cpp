@@ -20,8 +20,8 @@
 #include <DataTypes/DataType.hpp>
 #include <DataTypes/DataTypeProvider.hpp>
 #include <Functions/PhysicalFunction.hpp>
-#include <nautilus/DataTypes/VarVal.hpp>
-#include <nautilus/Interface/Record.hpp>
+#include <Nautilus/DataTypes/VarVal.hpp>
+#include <Nautilus/Interface/Record.hpp>
 #include <nautilus/std/cstring.h>
 #include <nautilus/Util.hpp>
 #include <AggregationPhysicalFunctionRegistry.hpp>

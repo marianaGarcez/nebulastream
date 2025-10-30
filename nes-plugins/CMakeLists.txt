@@ -15,48 +15,47 @@ include(${PROJECT_SOURCE_DIR}/cmake/PluginRegistrationUtil.cmake)
 # NOTE: Since these plugins are part of the main NebulaStream repo,
 #       we apply the same care and test coverage requirements to these plugins that we apply to the rest of the system.
 
+option(NES_ENABLE_MQTT "Enable MQTT Source/Sink plugins" OFF)
+
 # activate optional plugins and add the path "THE/PATH" to the build (adding all dependencies of the optional plugin)
 activate_optional_plugin("Sources/TCPSource" ON)
-activate_optional_plugin("Sources/MQTTSource" OFF)
-activate_optional_plugin("Sinks/MQTTSink" ON)
-<<<<<<< HEAD
+activate_optional_plugin("Sources/MQTTSource" ${NES_ENABLE_MQTT})
+activate_optional_plugin("Sinks/MQTTSink" ${NES_ENABLE_MQTT})
 activate_optional_plugin("ImageManip" OFF)
 activate_optional_plugin("Inference/IREE" OFF)
 activate_optional_plugin("Sources/GeneratorSource" OFF)
 activate_optional_plugin("Sources/AudioSource" OFF)
-=======
-activate_optional_plugin("ImageManip" OFF)
-activate_optional_plugin("Inference/IREE" OFF)
-activate_optional_plugin("Sources/GeneratorSource" OFF)
-activate_optional_plugin("Sources/AudioSource" OFF)
->>>>>>> 74674f9fe6 (Apply stashed changes from tutorial_fork)
 
-# MEOS is a dependency
-activate_optional_plugin("MEOS" ON)
-message(STATUS "Enable MEOS Plugin")
+# MEOS plugin (optional)
+if (NES_ENABLE_MEOS)
+    activate_optional_plugin("MEOS" ON)
+    message(STATUS "Enable MEOS Plugin")
 
-# Detect the platform
-if (APPLE)
-    message(STATUS "Building on macOS")
-    # Set the include and library directories for Homebrew (macOS)
-    set(MEOS_INCLUDE_DIR "/opt/homebrew/include" CACHE PATH "Path to MEOS include directory")
-    set(MEOS_PLUGIN_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include" CACHE PATH "Path to MEOS plugin include directory")
-    include_directories(SYSTEM ${MEOS_INCLUDE_DIR} ${MEOS_PLUGIN_INCLUDE_DIR})
-    include_directories(SYSTEM ${MEOS_INCLUDE_DIR} ${MEOS_PLUGIN_INCLUDE_DIR})
-    link_directories(${MEOS_LIBRARY_DIR} )
+    # Detect the platform
+    if (APPLE)
+        message(STATUS "Building on macOS")
+        # Set the include and library directories for Homebrew (macOS)
+        set(MEOS_INCLUDE_DIR "/opt/homebrew/include" CACHE PATH "Path to MEOS include directory")
+        set(MEOS_PLUGIN_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include" CACHE PATH "Path to MEOS plugin include directory")
+        include_directories(SYSTEM ${MEOS_INCLUDE_DIR} ${MEOS_PLUGIN_INCLUDE_DIR})
+        include_directories(SYSTEM ${MEOS_INCLUDE_DIR} ${MEOS_PLUGIN_INCLUDE_DIR})
+        link_directories(${MEOS_LIBRARY_DIR} )
 
-else()
-    message(STATUS "Building on Linux")
-
-    # Default behavior for Linux
-    find_package(meos REQUIRED)
-    if(meos_FOUND)
-        message(STATUS "MEOS found: include=${meos_INCLUDE_DIR}, library=${meos}")
-        include_directories(SYSTEM ${meos_INCLUDE_DIR})
     else()
-        message(FATAL_ERROR "MEOS library not found")
+        message(STATUS "Building on Linux")
+
+        # Default behavior for Linux
+        find_package(meos REQUIRED)
+        if(meos_FOUND)
+            message(STATUS "MEOS found: include=${meos_INCLUDE_DIR}, library=${meos}")
+            include_directories(SYSTEM ${meos_INCLUDE_DIR})
+        else()
+            message(FATAL_ERROR "MEOS library not found")
+        endif()
     endif()
-endif()
+else ()
+    message(STATUS "MEOS Plugin disabled (-DNES_ENABLE_MEOS=OFF)")
+endif ()
 
 if (NES_ENABLES_TESTS)
   # ChecksumSink depends on Checksum.cpp from systest which is only added when tests are enabled.

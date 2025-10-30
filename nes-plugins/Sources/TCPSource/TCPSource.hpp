@@ -36,7 +36,7 @@
 #include <sys/socket.h> /// For socket functions
 #include <sys/types.h>
 
-namespace NES
+namespace NES::Sources
 {
 
 /// Defines the names, (optional) default values, (optional) validation & config functions, for all TCP config parameters.

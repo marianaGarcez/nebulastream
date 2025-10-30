@@ -24,6 +24,7 @@
 #include <utility>
 #include <DataTypes/Schema.hpp>
 #include <MemoryLayout/MemoryLayout.hpp>
+#include <MemoryLayout/VariableSizedAccess.hpp>
 #include <Runtime/TupleBuffer.hpp>
 #include <fmt/format.h>
 #include <fmt/ranges.h>
@@ -56,7 +57,8 @@ std::string JSONFormat::tupleBufferToFormattedJSONString(Memory::TupleBuffer tbu
 {
     std::stringstream ss;
     const auto numberOfTuples = tbuffer.getNumberOfTuples();
-    auto buffer = std::span(tbuffer.getBuffer<char>(), numberOfTuples * formattingContext.schemaSizeInBytes);
+    auto dataSpan = tbuffer.getAvailableMemoryArea<char>();
+    auto buffer = std::span<const char>(dataSpan.data(), numberOfTuples * formattingContext.schemaSizeInBytes);
     for (size_t i = 0; i < numberOfTuples; i++)
     {
         auto tuple = buffer.subspan(i * formattingContext.schemaSizeInBytes, formattingContext.schemaSizeInBytes);
@@ -69,11 +71,9 @@ std::string JSONFormat::tupleBufferToFormattedJSONString(Memory::TupleBuffer tbu
                       auto offset = formattingContext.offsets[index];
                       if (type.type == DataType::Type::VARSIZED)
                       {
-                          auto childIdx = *std::bit_cast<const uint32_t*>(&tuple[offset]);
-                          return fmt::format(
-                              R"("{}":"{}")",
-                              formattingContext.names.at(index),
-                              Memory::MemoryLayouts::readVarSizedData(tbuffer, childIdx));
+                          auto combined = *std::bit_cast<const uint64_t*>(&tuple[offset]);
+                          auto value = MemoryLayout::readVarSizedDataAsString(tbuffer, VariableSizedAccess(combined));
+                          return fmt::format(R"("{}":"{}")", formattingContext.names.at(index), value);
                       }
                       return fmt::format("\"{}\":{}", formattingContext.names.at(index), type.formattedBytesToString(&tuple[offset]));
                   });

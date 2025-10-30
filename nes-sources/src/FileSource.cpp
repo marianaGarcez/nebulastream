@@ -29,7 +29,6 @@
 #include <Configurations/Descriptor.hpp>
 #include <Runtime/TupleBuffer.hpp>
 #include <Sources/SourceDescriptor.hpp>
-#include <SystestSources/SourceTypes.hpp>
 #include <ErrorHandling.hpp>
 #include <FileDataRegistry.hpp>
 #include <InlineDataRegistry.hpp>
@@ -60,15 +59,16 @@ void FileSource::close()
 }
 size_t FileSource::fillTupleBuffer(NES::Memory::TupleBuffer& tupleBuffer, Memory::AbstractBufferProvider&, const std::stop_token&)
 {
-    this->inputFile.read(tupleBuffer.getBuffer<char>(), static_cast<std::streamsize>(tupleBuffer.getBufferSize()));
+    auto span = tupleBuffer.getAvailableMemoryArea<char>();
+    this->inputFile.read(span.data(), static_cast<std::streamsize>(tupleBuffer.getBufferSize()));
     const auto numBytesRead = this->inputFile.gcount();
     this->totalNumBytesRead += numBytesRead;
     return numBytesRead;
 }
 
-NES::Configurations::DescriptorConfig::Config FileSource::validateAndFormat(std::unordered_map<std::string, std::string> config)
+NES::DescriptorConfig::Config FileSource::validateAndFormat(std::unordered_map<std::string, std::string> config)
 {
-    return NES::Configurations::DescriptorConfig::validateAndFormat<ConfigParametersCSV>(std::move(config), NAME);
+    return NES::DescriptorConfig::validateAndFormat<ConfigParametersCSV>(std::move(config), NAME);
 }
 
 std::ostream& FileSource::toString(std::ostream& str) const
@@ -77,58 +77,51 @@ std::ostream& FileSource::toString(std::ostream& str) const
     return str;
 }
 
-SourceValidationRegistryReturnType
-SourceValidationGeneratedRegistrar::RegisterFileSourceValidation(SourceValidationRegistryArguments sourceConfig)
-{
-    return FileSource::validateAndFormat(std::move(sourceConfig.config));
 }
 
-SourceRegistryReturnType SourceGeneratedRegistrar::RegisterFileSource(SourceRegistryArguments sourceRegistryArguments)
+
+namespace NES::SourceGeneratedRegistrar {
+SourceRegistryReturnType RegisterFileSource(SourceRegistryArguments sourceRegistryArguments)
 {
-    return std::make_unique<FileSource>(sourceRegistryArguments.sourceDescriptor);
+    return std::make_unique<NES::Sources::FileSource>(sourceRegistryArguments.sourceDescriptor);
+}
 }
 
-InlineDataRegistryReturnType InlineDataGeneratedRegistrar::RegisterFileInlineData(InlineDataRegistryArguments systestAdaptorArguments)
+namespace NES::InlineDataGeneratedRegistrar {
+InlineDataRegistryReturnType RegisterFileInlineData(InlineDataRegistryArguments args)
 {
-    if (systestAdaptorArguments.attachSource.tuples)
+    if (!args.tuples.empty())
     {
-        if (const auto filePath = systestAdaptorArguments.physicalSourceConfig.sourceConfig.find(std::string(SYSTEST_FILE_PATH_PARAMETER));
-            filePath != systestAdaptorArguments.physicalSourceConfig.sourceConfig.end())
+        if (auto it = args.physicalSourceConfig.sourceConfig.find(std::string("filePath"));
+            it != args.physicalSourceConfig.sourceConfig.end())
         {
-            filePath->second = systestAdaptorArguments.testFilePath;
-            if (std::ofstream testFile(systestAdaptorArguments.testFilePath); testFile.is_open())
+            it->second = args.testFilePath;
+            if (std::ofstream testFile(args.testFilePath); testFile.is_open())
             {
-                /// Write inline tuples to test file.
-                for (const auto& tuple : systestAdaptorArguments.attachSource.tuples.value())
+                for (const auto& tuple : args.tuples)
                 {
                     testFile << tuple << "\n";
                 }
                 testFile.flush();
-                return systestAdaptorArguments.physicalSourceConfig;
+                return args.physicalSourceConfig;
             }
-            throw TestException("Could not open source file \"{}\"", systestAdaptorArguments.testFilePath);
+            throw TestException("Could not open source file \"{}\"", args.testFilePath);
         }
         throw InvalidConfigParameter("A FileSource config must contain filePath parameter");
     }
-    throw TestException("An INLINE SystestAttachSource must not have a 'tuples' vector that is null.");
+    throw TestException("Inline data: tuples vector is empty.");
+}
 }
 
-FileDataRegistryReturnType FileDataGeneratedRegistrar::RegisterFileFileData(FileDataRegistryArguments systestAdaptorArguments)
+namespace NES::FileDataGeneratedRegistrar {
+FileDataRegistryReturnType RegisterFileFileData(FileDataRegistryArguments args)
 {
-    /// Check that the test data dir is defined and that the 'filePath' parameter is set
-    /// Replace the 'TESTDATA' placeholder in the filepath
-    if (const auto attachSourceFilePath = systestAdaptorArguments.attachSource.fileDataPath)
+    if (auto it = args.physicalSourceConfig.sourceConfig.find(std::string("filePath"));
+        it != args.physicalSourceConfig.sourceConfig.end())
     {
-        if (const auto filePath = systestAdaptorArguments.physicalSourceConfig.sourceConfig.find(std::string(SYSTEST_FILE_PATH_PARAMETER));
-            filePath != systestAdaptorArguments.physicalSourceConfig.sourceConfig.end())
-        {
-            filePath->second = attachSourceFilePath.value();
-            return systestAdaptorArguments.physicalSourceConfig;
-        }
-        throw InvalidConfigParameter("A FileSource config must contain filePath parameter.");
+        it->second = args.testFilePath;
+        return args.physicalSourceConfig;
     }
-    throw InvalidConfigParameter("An attach source of type FileData must contain a filePath configuration.");
+    throw InvalidConfigParameter("A FileSource config must contain filePath parameter.");
 }
-
-
 }

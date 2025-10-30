@@ -35,10 +35,10 @@ void ModelInferenceCompilationRule::apply(LogicalPlan& queryPlan)
 
     for (auto modelNameOperator : NES::getOperatorByType<InferModel::LogicalInferModelNameOperator>(queryPlan))
     {
-        auto name = modelNameOperator.getModelName();
+        auto name = modelNameOperator->getModelName();
         auto model = catalog->load(name);
         USED_IN_DEBUG auto shouldReplace = replaceOperator(
-            queryPlan, modelNameOperator, InferModel::LogicalInferModelOperator(model, modelNameOperator.getInputFields()));
+            queryPlan, modelNameOperator.getId(), InferModel::LogicalInferModelOperator(model, modelNameOperator->getInputFields()));
         queryPlan = std::move(shouldReplace.value());
     }
 

@@ -28,6 +28,8 @@ option(NES_ENABLE_EXPERIMENTAL_EXECUTION_MLIR "Enables the MLIR backend." ON)
 option(NES_LOG_WITH_STACKTRACE "Log exceptions with stacktrace" ON)
 option(ENABLE_LARGE_TESTS "Runs testcases with larger input data" OFF)
 option(NES_DEBUG_TUPLE_BUFFER_LEAKS "Heavyweight instrumentation for Tuplebuffer debugging" OFF)
+option(NES_ENABLE_INFERENCE "Build nes-inference module and inference-dependent features" OFF)
+option(NES_ENABLE_MEOS "Enable MEOS-based spatio-temporal features and plugin" ON)
 
 
 if (CMAKE_BUILD_TYPE STREQUAL "Benchmark")
@@ -123,6 +125,11 @@ if (ENABLE_IWYU)
     else ()
         message(WARNING "IWYU is enabled but not found! You will not get any suggestions")
     endif ()
+endif ()
+
+# Propagate feature toggles as compile definitions where helpful
+if (NES_ENABLE_MEOS)
+    add_compile_definitions(NES_ENABLE_MEOS)
 endif ()
 
 
@@ -243,6 +250,10 @@ add_custom_target(build_all_plugins)
 # Add target for common lib, which contains a minimal set
 # of shared functionality used by all components of nes
 file(GLOB NES_DIRECTORIES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "nes-*")
+if (NOT NES_ENABLE_INFERENCE)
+    list(REMOVE_ITEM NES_DIRECTORIES "nes-inference")
+    message(STATUS "Disabling nes-inference module (-DNES_ENABLE_INFERENCE=OFF)")
+endif ()
 foreach (NES_DIR ${NES_DIRECTORIES})
     add_subdirectory(${NES_DIR})
 endforeach ()

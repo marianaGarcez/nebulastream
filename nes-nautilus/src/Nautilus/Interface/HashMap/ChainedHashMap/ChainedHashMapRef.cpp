@@ -11,7 +11,14 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 */
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wnonportable-include-path"
+#endif
 #include <Nautilus/Interface/HashMap/ChainedHashMap/ChainedHashMapRef.hpp>
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 
 #include <cstddef>
 #include <cstdint>

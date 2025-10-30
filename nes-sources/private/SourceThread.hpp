@@ -58,8 +58,16 @@ class SourceThread
 public:
     explicit SourceThread(
         OriginId originId, /// Todo #241: Rethink use of originId for sources, use new identifier for unique identification.
-        std::shared_ptr<AbstractBufferProvider> bufferManager,
-        std::unique_ptr<Source> sourceImplementation);
+        std::shared_ptr<Memory::AbstractPoolProvider> bufferManager,
+        size_t numOfLocalBuffers,
+        std::unique_ptr<Sources::Source> sourceImplementation);
+
+    // Back-compat overload used in tests
+    explicit SourceThread(
+        OriginId originId,
+        std::shared_ptr<Memory::AbstractPoolProvider> bufferManager,
+        std::unique_ptr<Sources::Source> sourceImplementation)
+        : SourceThread(originId, std::move(bufferManager), 1, std::move(sourceImplementation)) {}
 
     SourceThread() = delete;
     SourceThread(const SourceThread& other) = delete;
@@ -88,7 +96,8 @@ public:
 protected:
     OriginId originId;
     std::shared_ptr<AbstractBufferProvider> localBufferManager;
-    std::unique_ptr<Source> sourceImplementation;
+    size_t numOfLocalBuffers;
+    std::unique_ptr<Sources::Source> sourceImplementation;
     std::atomic_bool started;
 
     std::jthread thread;

@@ -12,7 +12,7 @@
     limitations under the License.
 */
 
-﻿#include <SinksParsing/CSVFormat.hpp>
+#include <SinksParsing/CSVFormat.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -60,7 +60,8 @@ std::string CSVFormat::tupleBufferToFormattedCSVString(Memory::TupleBuffer tbuff
 {
     std::stringstream ss;
     const auto numberOfTuples = tbuffer.getNumberOfTuples();
-    const auto buffer = std::span(tbuffer.getBuffer<std::byte>(), numberOfTuples * formattingContext.schemaSizeInBytes);
+    const auto dataSpan = tbuffer.getAvailableMemoryArea<std::byte>();
+    const auto buffer = std::span<const std::byte>(dataSpan.data(), numberOfTuples * formattingContext.schemaSizeInBytes);
     for (size_t i = 0; i < numberOfTuples; i++)
     {
         auto tuple = buffer.subspan(i * formattingContext.schemaSizeInBytes, formattingContext.schemaSizeInBytes);
@@ -69,17 +70,18 @@ std::string CSVFormat::tupleBufferToFormattedCSVString(Memory::TupleBuffer tbuff
                           [&formattingContext, &tuple, &tbuffer, copyOfEscapeStrings = escapeStrings](const auto& index)
                           {
                               const auto physicalType = formattingContext.physicalTypes[index];
+                              const auto offset = formattingContext.offsets[index];
                               if (physicalType.type == DataType::Type::VARSIZED)
                               {
-                                  auto childIdx = *std::bit_cast<const uint32_t*>(&tuple[formattingContext.offsets[index]]);
-                                  auto varSizedData = Memory::MemoryLayouts::readVarSizedData(tbuffer, childIdx);
+                                  const auto combined = *std::bit_cast<const uint64_t*>(&tuple[offset]);
+                                  const auto str = MemoryLayout::readVarSizedDataAsString(tbuffer, VariableSizedAccess(combined));
                                   if (copyOfEscapeStrings)
                                   {
-                                      return "\"" + varSizedData + "\"";
+                                      return "\"" + str + "\"";
                                   }
-                                  return varSizedData;
+                                  return str;
                               }
-                              return physicalType.formattedBytesToString(&tuple[formattingContext.offsets[index]]);
+                              return physicalType.formattedBytesToString(&tuple[offset]);
                           });
         ss << fmt::format("{}\n", fmt::join(fields, ","));
     }

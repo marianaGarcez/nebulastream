@@ -79,6 +79,9 @@ protected:
     void triggerSlices(
         const std::map<WindowInfoAndSequenceNumber, std::vector<std::shared_ptr<Slice>>>& slicesAndWindowInfo,
         PipelineExecutionContext* pipelineCtx) override;
+
+private:
+    folly::Synchronized<RollingAverage<uint64_t>> rollingAverageNumberOfKeys;
 };
 
 }

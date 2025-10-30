@@ -51,6 +51,26 @@
 
 #include <Identifiers/NESStrongType.hpp>
 
+// Forward declare enum used in SystestAttachSource
+namespace NES { namespace Systest { enum class TestDataIngestionType : uint8_t; }}
+
+// Attach-source description used by the systest parser
+namespace NES
+{
+struct SystestAttachSource
+{
+    std::string sourceType;
+    std::filesystem::path sourceConfigurationPath;
+    std::string inputFormatterType;
+    std::filesystem::path inputFormatterConfigurationPath;
+    std::string logicalSourceName;
+    Systest::TestDataIngestionType testDataIngestionType{};
+    std::vector<std::string> tuples;
+    std::optional<std::filesystem::path> fileDataPath;
+    std::shared_ptr<const std::vector<std::jthread>> serverThreads; // optional server threads for generators
+};
+}
+
 namespace NES::Systest
 {
 

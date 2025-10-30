@@ -26,6 +26,7 @@
 #include <Identifiers/Identifiers.hpp>
 #include <Traits/Trait.hpp>
 #include <Util/PlanRenderer.hpp>
+#include <Util/Strings.hpp>
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 #include <folly/hash/Hash.h>
@@ -52,11 +53,13 @@ SerializableTrait OutputOriginIdsTrait::serialize() const
     SerializableTrait trait;
     auto* serializedDescriptorConfig = trait.mutable_config();
     SerializableVariantDescriptor serializedVariant{};
-    UInt64List* serializedOriginIds = serializedVariant.mutable_ulongs();
-    for (const auto& originId : originIds)
-    {
-        serializedOriginIds->add_values(originId.getRawValue());
+    // Encode origin IDs as a comma-separated string for portability with current proto
+    std::string encoded;
+    for (size_t i = 0; i < originIds.size(); ++i) {
+        if (i) encoded.push_back(',');
+        encoded += std::to_string(originIds[i].getRawValue());
     }
+    serializedVariant.set_string_value(encoded);
     (*serializedDescriptorConfig)["outputOriginIds"] = serializedVariant;
     return trait;
 }
@@ -120,14 +123,25 @@ TraitRegistryReturnType TraitGeneratedRegistrar::RegisterOutputOriginIdsTrait(Tr
     {
         throw CannotDeserialize("OutputOriginIdsTrait is missing in configuration");
     }
-    if (!std::holds_alternative<UInt64List>(configIter->second))
+    if (!std::holds_alternative<std::string>(configIter->second))
     {
-        throw CannotDeserialize("OutputOriginIdsTrait is not of type OriginIdList");
+        throw CannotDeserialize("OutputOriginIdsTrait is not of type string");
     }
 
-    const auto& serializedOriginIdList = std::get<UInt64List>(configIter->second);
-    const auto originIdList = serializedOriginIdList.values()
-        | std::views::transform([](const auto& originId) { return OriginId{originId}; }) | std::ranges::to<std::vector>();
+    const auto& encoded = std::get<std::string>(configIter->second);
+    std::vector<OriginId> originIdList;
+    size_t start = 0;
+    while (start <= encoded.size()) {
+        size_t pos = encoded.find(',', start);
+        auto token = encoded.substr(start, pos == std::string::npos ? std::string::npos : pos - start);
+        if (!token.empty()) {
+            if (auto parsed = NES::Util::from_chars<uint64_t>(token)) {
+                originIdList.emplace_back(parsed.value());
+            }
+        }
+        if (pos == std::string::npos) break;
+        start = pos + 1;
+    }
     return OutputOriginIdsTrait{originIdList};
 }
 }

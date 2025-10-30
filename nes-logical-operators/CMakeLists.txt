@@ -16,11 +16,20 @@ get_source(nes-logical-operators NES_LOGICAL_OPERATORS_SOURCE_FILES)
 
 # Add Library
 add_library(nes-logical-operators ${NES_LOGICAL_OPERATORS_SOURCE_FILES})
-target_link_libraries(nes-logical-operators PUBLIC nes-sources nes-sinks nes-query-optimizer nes-data-types nes-inference nes-meos)
+target_link_libraries(nes-logical-operators PUBLIC nes-sources nes-sinks nes-query-optimizer nes-data-types)
+if (NES_ENABLE_INFERENCE)
+    target_link_libraries(nes-logical-operators PUBLIC nes-inference)
+endif ()
+if (NES_ENABLE_MEOS)
+    target_link_libraries(nes-logical-operators PUBLIC nes-meos)
+endif ()
 target_include_directories(nes-logical-operators PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../nes-plugins/MEOS/include>
         $<INSTALL_INTERFACE:include/nebulastream/>)
+if (NES_ENABLE_MEOS)
+    target_include_directories(nes-logical-operators PUBLIC
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../nes-plugins/MEOS/include>)
+endif ()
 
 create_registries_for_component(LogicalOperator LogicalFunction AggregationLogicalFunction)
 add_tests_if_enabled(tests)

@@ -37,14 +37,14 @@
 #include <fmt/format.h>
 #include <ErrorHandling.hpp>
 
-namespace NES::Sources
+namespace NES
 {
 
 SourceThread::SourceThread(
     OriginId originId,
     std::shared_ptr<Memory::AbstractPoolProvider> poolProvider,
     size_t numOfLocalBuffers,
-    std::unique_ptr<Source> sourceImplementation)
+    std::unique_ptr<Sources::Source> sourceImplementation)
     : originId(originId)
     , localBufferManager(std::move(poolProvider))
     , numOfLocalBuffers(numOfLocalBuffers)
@@ -85,7 +85,7 @@ void threadSetup(OriginId originId)
 /// RAII-Wrapper around source open and close
 struct SourceHandle
 {
-    explicit SourceHandle(Source& source) : source(source) { source.open(); }
+    explicit SourceHandle(Sources::Source& source) : source(source) { source.open(); }
     SourceHandle(const SourceHandle& other) = delete;
     SourceHandle(SourceHandle&& other) noexcept = delete;
     SourceHandle& operator=(const SourceHandle& other) = delete;
@@ -103,11 +103,11 @@ struct SourceHandle
             tryLogCurrentException();
         }
     }
-    Source& source; ///NOLINT Source handle should never outlive the source
+    Sources::Source& source; ///NOLINT Source handle should never outlive the source
 };
 
 SourceImplementationTermination dataSourceThreadRoutine(
-    const std::stop_token& stopToken, Source& source, Memory::AbstractBufferProvider& bufferProvider, const EmitFn& emit)
+    const std::stop_token& stopToken, Sources::Source& source, Memory::AbstractBufferProvider& bufferProvider, const EmitFn& emit)
 {
     const SourceHandle sourceHandle(source);
     while (!stopToken.stop_requested())
@@ -149,16 +149,12 @@ SourceImplementationTermination dataSourceThreadRoutine(
     return {SourceImplementationTermination::StopRequested};
 }
 
-struct DestroyOnExit
-{
-    std::shared_ptr<Memory::AbstractBufferProvider> bufferProvider;
-    ~DestroyOnExit() { bufferProvider->destroy(); }
-};
+struct DestroyOnExit { std::shared_ptr<Memory::AbstractBufferProvider> bufferProvider; ~DestroyOnExit() = default; };
 
 void dataSourceThread(
     const std::stop_token& stopToken,
     std::promise<SourceImplementationTermination> result,
-    Source* source,
+    Sources::Source* source,
     SourceReturnType::EmitFunction emit,
     OriginId originId,
     std::optional<std::shared_ptr<Memory::AbstractBufferProvider>> bufferProvider)
@@ -166,7 +162,7 @@ void dataSourceThread(
     threadSetup(originId);
     if (!bufferProvider)
     {
-        emit(originId, SourceReturnType::Error(BufferAllocationFailure()));
+        emit(originId, SourceReturnType::Error(BufferAllocationFailure()), stopToken);
         result.set_exception(std::make_exception_ptr(BufferAllocationFailure()));
         return;
     }
@@ -179,7 +175,7 @@ void dataSourceThread(
         {
             addBufferMetaData(originId, SequenceNumber(sequenceNumberGenerator++), buffer);
         }
-        emit(originId, SourceReturnType::Data{std::move(buffer)});
+        emit(originId, SourceReturnType::Data{std::move(buffer)}, stopToken);
     };
 
     try
@@ -187,14 +183,14 @@ void dataSourceThread(
         result.set_value_at_thread_exit(dataSourceThreadRoutine(stopToken, *source, **bufferProvider, dataEmit));
         if (!stopToken.stop_requested())
         {
-            emit(originId, SourceReturnType::EoS{});
+            emit(originId, SourceReturnType::EoS{}, stopToken);
         }
     }
     catch (const std::exception& e)
     {
         auto ingestionException = RunningRoutineFailure(e.what());
         result.set_exception_at_thread_exit(std::make_exception_ptr(ingestionException));
-        emit(originId, SourceReturnType::Error{std::move(ingestionException)});
+        emit(originId, SourceReturnType::Error{std::move(ingestionException)}, stopToken);
     }
 }
 }
@@ -217,7 +213,7 @@ bool SourceThread::start(SourceReturnType::EmitFunction&& emitFunction)
         sourceImplementation.get(),
         std::move(emitFunction),
         originId,
-        localBufferManager->createFixedSizeBufferPool(numOfLocalBuffers));
+        localBufferManager);
     thread = std::move(sourceThread);
     return true;
 }

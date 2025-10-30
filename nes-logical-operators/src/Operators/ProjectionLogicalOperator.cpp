@@ -237,17 +237,14 @@ void ProjectionLogicalOperator::serialize(SerializableOperator& serializableOper
         serializableOperator.add_children_ids(child.getId().getRawValue());
     }
 
-    ProjectionList projList;
+    FunctionList fnList;
     for (const auto& [name, fn] : getProjections())
     {
-        auto& proj = *projList.add_projections();
-        if (name)
-        {
-            proj.set_identifier(name->getFieldName());
-        }
-        proj.mutable_function()->CopyFrom(fn.serialize());
+        (void)name; // names are not encoded in FunctionList
+        auto* serializedFunction = fnList.add_functions();
+        serializedFunction->CopyFrom(fn.serialize());
     }
-    (*serializableOperator.mutable_config())[ConfigParameters::PROJECTION_FUNCTION_NAME] = descriptorConfigTypeToProto(projList);
+    (*serializableOperator.mutable_config())[ConfigParameters::PROJECTION_FUNCTION_NAME] = descriptorConfigTypeToProto(fnList);
     (*serializableOperator.mutable_config())[ConfigParameters::ASTERISK] = descriptorConfigTypeToProto(asterisk);
 
     serializableOperator.mutable_operator_()->CopyFrom(proto);
@@ -259,16 +256,16 @@ LogicalOperatorGeneratedRegistrar::RegisterProjectionLogicalOperator(LogicalOper
     const auto functionVariant = arguments.config.at(ProjectionLogicalOperator::ConfigParameters::PROJECTION_FUNCTION_NAME);
     const auto asterisk = std::get<bool>(arguments.config.at(ProjectionLogicalOperator::ConfigParameters::ASTERISK));
 
-    if (const auto* projection = std::get_if<ProjectionList>(&functionVariant))
+    if (const auto* functionList = std::get_if<FunctionList>(&functionVariant))
     {
         auto logicalOperator = ProjectionLogicalOperator(
-            projection->projections()
+            functionList->functions()
                 | std::views::transform(
                     [](const auto& serialized)
                     {
                         return ProjectionLogicalOperator::Projection{
-                            FieldIdentifier(serialized.identifier()),
-                            FunctionSerializationUtil::deserializeFunction(serialized.function())};
+                            std::nullopt,
+                            FunctionSerializationUtil::deserializeFunction(serialized)};
                     })
                 | std::ranges::to<std::vector>(),
             ProjectionLogicalOperator::Asterisk(asterisk));

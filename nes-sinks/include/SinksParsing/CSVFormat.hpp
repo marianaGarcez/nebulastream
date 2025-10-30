@@ -53,8 +53,6 @@ public:
     [[nodiscard]] std::string tupleBufferToFormattedCSVString(Memory::TupleBuffer tbuffer, const FormattingContext& formattingContext) const;
 
     std::ostream& toString(std::ostream& os) const override { return os << *this; }
-
-    std::ostream& toString(std::ostream& os) const override { return os << *this; }
     friend std::ostream& operator<<(std::ostream& out, const CSVFormat& format);
 
 private:

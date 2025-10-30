@@ -15,11 +15,6 @@
 
 #include <ostream>
 
-namespace NES
-{
-std::ostream& operator<<(std::ostream& out, const Source& source)
-{
-    return source.toString(out);
-}
-
+namespace NES::Sources {
+std::ostream& operator<<(std::ostream& out, const Source& source) { return source.toString(out); }
 }

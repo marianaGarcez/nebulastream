@@ -22,6 +22,13 @@ target_include_directories(mqtt_source_validation_plugin_library
         PRIVATE .
 )
 
-find_package(PahoMqttCpp CONFIG REQUIRED)
-target_link_libraries(mqtt_source_plugin_library PRIVATE PahoMqttCpp::paho-mqttpp3-static)
-target_link_libraries(mqtt_source_validation_plugin_library PRIVATE PahoMqttCpp::paho-mqttpp3-static)
+find_package(paho-mqttpp3 CONFIG REQUIRED)
+if (TARGET paho-mqttpp3::paho-mqttpp3)
+    target_link_libraries(mqtt_source_plugin_library PRIVATE paho-mqttpp3::paho-mqttpp3)
+    target_link_libraries(mqtt_source_validation_plugin_library PRIVATE paho-mqttpp3::paho-mqttpp3)
+elseif (TARGET paho-mqttpp3::paho-mqttpp3-static)
+    target_link_libraries(mqtt_source_plugin_library PRIVATE paho-mqttpp3::paho-mqttpp3-static)
+    target_link_libraries(mqtt_source_validation_plugin_library PRIVATE paho-mqttpp3::paho-mqttpp3-static)
+else ()
+    message(FATAL_ERROR "paho-mqttpp3 package found, but no known targets are available.")
+endif ()

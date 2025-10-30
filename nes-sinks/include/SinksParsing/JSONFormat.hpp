@@ -12,7 +12,7 @@
     limitations under the License.
 */
 
-﻿#pragma once
+#pragma once
 #include <SinksParsing/Format.hpp>
 
 #include <ostream>

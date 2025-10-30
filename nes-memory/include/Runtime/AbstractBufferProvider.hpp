@@ -57,4 +57,19 @@ public:
     virtual std::optional<TupleBuffer> getUnpooledBuffer(size_t bufferSize) = 0;
 };
 
-}
+} 
+
+// Backward-compatibility aliases for legacy code referencing Memory::AbstractBufferProvider
+namespace NES {
+namespace Memory {
+using AbstractBufferProvider = ::NES::AbstractBufferProvider;
+// Backward-compatibility alias for legacy tests
+using AbstractPoolProvider = ::NES::AbstractBufferProvider;
+} // namespace Memory
+} // namespace NES
+
+namespace Memory {
+using AbstractBufferProvider = ::NES::AbstractBufferProvider;
+// Backward-compatibility alias for legacy tests
+using AbstractPoolProvider = ::NES::AbstractBufferProvider;
+} // namespace Memory

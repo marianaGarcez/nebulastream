@@ -22,6 +22,7 @@
 #include <Configurations/Descriptor.hpp>
 #include <ErrorHandling.hpp>
 #include <SourceValidationRegistry.hpp>
+#include <FileSource.hpp>
 
 namespace NES::SourceValidationProvider
 {
@@ -31,5 +32,15 @@ provide(const std::string_view sourceType, std::unordered_map<std::string, std::
 {
     auto sourceValidationRegistryArguments = SourceValidationRegistryArguments(std::move(stringConfig));
     return SourceValidationRegistry::instance().create(std::string{sourceType}, std::move(sourceValidationRegistryArguments));
+}
+
+} // namespace NES::SourceValidationProvider
+
+// Provide built-in validation for File source so the generated registrar can resolve the symbol
+namespace NES
+{
+SourceValidationRegistryReturnType RegisterFileSourceValidation(SourceValidationRegistryArguments args)
+{
+    return ::NES::Sources::FileSource::validateAndFormat(std::move(args.config));
 }
 }

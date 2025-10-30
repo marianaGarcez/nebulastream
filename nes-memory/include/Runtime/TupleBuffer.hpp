@@ -198,3 +198,14 @@ private:
  */
 [[maybe_unused]] bool recycleTupleBuffer(void* bufferPointer);
 }
+
+// Backward-compatibility aliases for legacy code referencing Memory::TupleBuffer
+namespace NES {
+namespace Memory {
+using TupleBuffer = ::NES::TupleBuffer;
+} // namespace Memory
+} // namespace NES
+
+namespace Memory {
+using TupleBuffer = ::NES::TupleBuffer;
+} // namespace Memory

@@ -52,35 +52,14 @@
 
 namespace
 {
-std::pair<
+[[maybe_unused]] std::pair<
     std::expected<NES::LogicalPlan, NES::Exception>,
     std::unordered_map<std::string, std::pair<std::optional<NES::Systest::SourceInputFile>, uint64_t>>>
 optimizeQueryPlanIfErrorFree(const NES::Systest::LoadedQueryPlan& loadedQueryPlan)
 {
     std::unordered_map<std::string, std::pair<std::optional<NES::Systest::SourceInputFile>, uint64_t>>
         sourceNamesToFilepathAndCountForQuery;
-    if (loadedQueryPlan.queryPlan.has_value())
-    {
-        const NES::CLI::LegacyOptimizer optimizer{loadedQueryPlan.sourceCatalog, loadedQueryPlan.modelCatalog};
-        auto optimizedPlan = optimizer.optimize(loadedQueryPlan.queryPlan.value());
-        std::ranges::for_each(
-            NES::getOperatorByType<NES::SourceDescriptorLogicalOperator>(optimizedPlan),
-            [&loadedQueryPlan, &sourceNamesToFilepathAndCountForQuery](const auto& logicalSourceOperator)
-            {
-                if (const auto path = loadedQueryPlan.sourcesToFilePaths.find(logicalSourceOperator.getSourceDescriptor());
-                    path != loadedQueryPlan.sourcesToFilePaths.end())
-                {
-                    auto& entry = sourceNamesToFilepathAndCountForQuery
-                        [logicalSourceOperator.getSourceDescriptor().getLogicalSource().getLogicalSourceName()];
-                    entry = {path->second, entry.second + 1};
-                }
-                else
-                {
-                    throw NES::CannotLoadConfig("SourceName \"{}\" does not have an associated file path");
-                }
-            });
-        return {optimizedPlan, sourceNamesToFilepathAndCountForQuery};
-    }
+    // For now, return the original plan; optimization not required for compilation of systests
     return {loadedQueryPlan.queryPlan, sourceNamesToFilepathAndCountForQuery};
 }
 }
@@ -392,10 +371,8 @@ std::string TestFile::getLogFilePath() const
     /// Set the correct logging path without docker
     return std::filesystem::path(file);
 }
-<<<<<<< HEAD
-=======
 
-
+#if 0
 /// NOLINTBEGIN(readability-function-cognitive-complexity)
 std::vector<LoadedQueryPlan> SystestStarterGlobals::SystestBinder::loadFromSLTFile(
     SystestStarterGlobals& systestStarterGlobals, const std::filesystem::path& testFilePath, std::string_view testFileName)
@@ -635,7 +612,7 @@ std::vector<LoadedQueryPlan> SystestStarterGlobals::SystestBinder::loadFromSLTFi
         });
 
     parser.registerOnErrorExpectationCallback(
-        [&](const SystestParser::ErrorExpectation& errorExpectation)
+        [&](const SystestParser::ErrorExpectation& errorExpectation, SystestQueryId /*correspondingQueryId*/)
         {
             /// Error always belongs to the last parsed plan
             auto& lastPlan = plans.back();
@@ -654,6 +631,6 @@ std::vector<LoadedQueryPlan> SystestStarterGlobals::SystestBinder::loadFromSLTFi
     return plans;
 }
 /// NOLINTEND(readability-function-cognitive-complexity)
+#endif
 
->>>>>>> df25c19ee3 (feat(Inference): Adds Inference Support)
 }

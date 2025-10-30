@@ -111,3 +111,9 @@ std::pair<std::unique_ptr<SourceHandle>, std::shared_ptr<TestSourceControl>>
 getTestSource(OriginId originId, std::shared_ptr<Memory::AbstractPoolProvider> bufferPool);
 
 }
+
+// Provide convenient aliases in NES namespace for tests using unqualified names
+namespace NES {
+using TestSourceControl = Sources::TestSourceControl;
+using TestSource = Sources::TestSource;
+}

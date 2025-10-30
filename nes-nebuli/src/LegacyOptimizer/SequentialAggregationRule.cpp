@@ -28,11 +28,11 @@ void SequentialAggregationRule::apply(LogicalPlan& queryPlan) const
     auto aggregations = getOperatorByType<WindowedAggregationLogicalOperator>(queryPlan);
     for (const auto& aggregation : aggregations)
     {
-        if (aggregation.requiresSequentialAggregation())
+        if (aggregation->requiresSequentialAggregation())
         {
             queryPlan = replaceSubtree(
                             queryPlan,
-                            LogicalOperator(aggregation),
+                            aggregation.getId(),
                             LogicalOperator(aggregation).withChildren({SequenceLogicalOperator().withChildren(aggregation.getChildren())}))
                             .value();
         }

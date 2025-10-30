@@ -24,9 +24,9 @@
 namespace NES::Runtime::Execution::Operators
 {
 
-std::optional<Memory::TupleBuffer*> SequenceOperatorHandler::getNextBuffer(uint8_t* bufferMemory)
+std::optional<Memory::TupleBuffer*> SequenceOperatorHandler::getNextBuffer(Memory::TupleBuffer* tupleBuffer)
 {
-    auto buffer = Memory::TupleBuffer::reinterpretAsTupleBuffer(bufferMemory);
+    auto buffer = *tupleBuffer;
     if (auto optBuffer = sequencer.isNext(SequenceData(buffer.getSequenceNumber(), buffer.getChunkNumber(), buffer.isLastChunk()), buffer))
     {
         currentBuffer = std::move(*optBuffer);

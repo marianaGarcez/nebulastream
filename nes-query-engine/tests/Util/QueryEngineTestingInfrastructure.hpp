@@ -66,6 +66,7 @@
 
 namespace NES::Testing
 {
+using NES::Sources::TestSourceControl;
 static constexpr size_t DEFAULT_BUFFER_SIZE = 8192;
 static constexpr size_t NUMBER_OF_TUPLES_PER_BUFFER = 23;
 static constexpr size_t NUMBER_OF_BUFFERS_PER_SOURCE = 300;

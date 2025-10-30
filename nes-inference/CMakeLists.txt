@@ -10,10 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-find_package(boost_system REQUIRED CONFIG)
-find_package(boost_filesystem REQUIRED CONFIG)
-find_package(boost_process REQUIRED CONFIG)
-find_package(boost_graph REQUIRED CONFIG)
+find_package(Boost REQUIRED COMPONENTS system filesystem process graph)
 
 add_library(nes-inference ModelLoader.cpp Model.cpp)
 target_include_directories(nes-inference PUBLIC include PRIVATE .)

@@ -49,7 +49,9 @@
 #include <Functions/LogicalFunction.hpp>
 #include <Functions/LogicalFunctionProvider.hpp>
 #include <Operators/Windows/Aggregations/ArrayAggregationLogicalFunction.hpp>
+#ifdef NES_ENABLE_MEOS
 #include <Functions/TemporalIntersectsFunction.hpp>
+#endif
 #include <Operators/Windows/Aggregations/AvgAggregationLogicalFunction.hpp>
 #include <Operators/Windows/Aggregations/CountAggregationLogicalFunction.hpp>
 #include <Operators/Windows/Aggregations/MaxAggregationLogicalFunction.hpp>
@@ -983,6 +985,7 @@ void AntlrSQLQueryPlanCreator::exitFunctionCall(AntlrSQLParser::FunctionCallCont
             {
                 helpers.top().functionBuilder.push_back(*logicalFunction);
             }
+#ifdef NES_ENABLE_MEOS
             else if (funcName == "TEMPORAL_INTERSECTS")
             {
                 INVARIANT(
@@ -997,6 +1000,7 @@ void AntlrSQLQueryPlanCreator::exitFunctionCall(AntlrSQLParser::FunctionCallCont
                 helpers.top().functionBuilder.pop_back();
                 helpers.top().functionBuilder.emplace_back(TemporalIntersectsFunction(lon, lat, ts));
             }
+#endif
             else
             {
                 throw InvalidQuerySyntax("Unknown (aggregation) function: {}, resolved to token type: {}", funcName, tokenType);

@@ -90,7 +90,7 @@ struct BoundQueryConfig
 {
     LogicalPlan plan;
     /// This should be changed to bound sinks once there is a sink catalog
-    std::unordered_map<std::string, std::shared_ptr<Sinks::SinkDescriptor>> sinks;
+    std::unordered_map<std::string, std::shared_ptr<NES::SinkDescriptor>> sinks;
     std::vector<NES::LogicalSource> logicalSources;
     std::vector<SourceDescriptor> sourceDescriptors;
     std::vector<Nebuli::Inference::ModelDescriptor> modelDescriptors;
@@ -108,7 +108,15 @@ public:
     {
     }
 
+    // Compatibility overload used by NebuLIStarter; sink catalog is not required here
+    explicit YAMLBinder(
+        const std::shared_ptr<SourceCatalog>& sourceCatalog, const std::shared_ptr<SinkCatalog>& /*sinkCatalog*/)
+        : sourceCatalog(sourceCatalog), modelCatalog(std::make_shared<Nebuli::Inference::ModelCatalog>())
+    {
+    }
+
     BoundQueryConfig parseAndBind(std::istream& inputStream);
+    Schema bindSchema(const std::vector<SchemaField>& attributeFields) const;
     std::vector<NES::LogicalSource> bindRegisterLogicalSources(const std::vector<LogicalSource>& unboundSources);
     std::vector<SourceDescriptor> bindRegisterPhysicalSources(const std::vector<PhysicalSource>& unboundSources);
     std::vector<Nebuli::Inference::ModelDescriptor> bindRegisterModels(const std::vector<Model>& vector);

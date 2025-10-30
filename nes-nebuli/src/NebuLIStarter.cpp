@@ -259,7 +259,8 @@ int main(int argc, char** argv)
         NES::LogicalPlan boundPlan;
         if (input == "-")
         {
-            boundPlan = yamlBinder.parseAndBind(std::cin);
+            auto cfg = yamlBinder.parseAndBind(std::cin);
+            boundPlan = std::move(cfg.plan);
         }
         else
         {
@@ -268,7 +269,8 @@ int main(int argc, char** argv)
             {
                 throw NES::QueryDescriptionNotReadable(std::strerror(errno)); /// NOLINT(concurrency-mt-unsafe)
             }
-            boundPlan = yamlBinder.parseAndBind(file);
+            auto cfg = yamlBinder.parseAndBind(file);
+            boundPlan = std::move(cfg.plan);
         }
 
         const NES::LogicalPlan optimizedQueryPlan = optimizer->optimize(boundPlan);

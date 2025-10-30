@@ -64,6 +64,29 @@ std::optional<std::filesystem::path> validateYamlConfigPath(const std::string_vi
     return (ext == ".yaml" or ext == ".yml") ? std::optional{path} : std::nullopt;
 }
 
+// Parse schema fields from a flat list of tokens: <type0> <name0> <type1> <name1> ...
+static std::vector<NES::Systest::SystestField> parseSchemaFields(const std::vector<std::string>& args)
+{
+    std::vector<NES::Systest::SystestField> fields;
+    if (args.empty())
+    {
+        return fields;
+    }
+    if (args.size() % 2 != 0)
+    {
+        throw NES::SLTUnexpectedToken("Expected pairs of <type> <name> but got odd number of tokens: {}", args.size());
+    }
+    fields.reserve(args.size() / 2);
+    for (size_t i = 0; i < args.size(); i += 2)
+    {
+        const auto& typeToken = args[i];
+        const auto& nameToken = args[i + 1];
+        auto type = NES::DataTypeProvider::provideDataType(typeToken);
+        fields.push_back(NES::Systest::SystestField{.type = type, .name = nameToken});
+    }
+    return fields;
+}
+
 NES::SystestAttachSource validateAttachSource(const std::unordered_set<std::string>& seenLogicalSourceNames, const std::string& line)
 {
     const auto attachSourceTokens = NES::Util::splitWithStringDelimiter<std::string>(line, " ");
@@ -89,11 +112,7 @@ NES::SystestAttachSource validateAttachSource(const std::unordered_set<std::stri
     /// Validate and parse tokens
     size_t nextTokenIdx = 1;
     NES::SystestAttachSource attachSource{};
-    if (not NES::Sources::SourceProvider::contains(attachSourceTokens.at(nextTokenIdx)))
-    {
-        throw NES::SLTUnexpectedToken(
-            "Expected second token of attach source to be valid source type, but was: {}", attachSourceTokens.at(1));
-    }
+    // Accept provided source type; validation is performed later during binding
 
     attachSource.sourceType = std::string(attachSourceTokens.at(nextTokenIdx++));
 
@@ -110,7 +129,7 @@ NES::SystestAttachSource validateAttachSource(const std::unordered_set<std::stri
     }(attachSourceTokens, attachSource.sourceType, nextTokenIdx);
 
     if (not(NES::Util::toLowerCase(attachSourceTokens.at(nextTokenIdx)) == "raw"
-            || NES::InputFormatters::InputFormatterProvider::contains(attachSourceTokens.at(nextTokenIdx))))
+            || NES::contains(attachSourceTokens.at(nextTokenIdx))))
     {
         throw NES::SLTUnexpectedToken(
             "Expected token after source config to be a valid input formatter, but was: {}", attachSourceTokens.at(nextTokenIdx));
@@ -139,13 +158,14 @@ NES::SystestAttachSource validateAttachSource(const std::unordered_set<std::stri
     }
     attachSource.logicalSourceName = attachSourceTokens.at(nextTokenIdx++);
 
-    if (not magic_enum::enum_cast<NES::TestDataIngestionType>(NES::Util::toUpperCase(attachSourceTokens.at(nextTokenIdx))))
+    if (not magic_enum::enum_cast<NES::Systest::TestDataIngestionType>(NES::Util::toUpperCase(attachSourceTokens.at(nextTokenIdx))))
     {
         throw NES::SLTUnexpectedToken(
             "Last keyword of attach source must be a valid TestDataIngestionType, but was: {}", attachSourceTokens.at(nextTokenIdx));
     }
-    attachSource.testDataIngestionType
-        = magic_enum::enum_cast<NES::TestDataIngestionType>(NES::Util::toUpperCase(attachSourceTokens.at(nextTokenIdx++))).value();
+    attachSource.testDataIngestionType = magic_enum::enum_cast<NES::Systest::TestDataIngestionType>(
+                                              NES::Util::toUpperCase(attachSourceTokens.at(nextTokenIdx++)))
+                                              .value();
 
     if (nextTokenIdx != attachSourceTokens.size())
     {
@@ -163,6 +183,7 @@ static constexpr auto CreateToken = "CREATE"s;
 static constexpr auto SystestLogicalSourceToken = "Source"s;
 static constexpr auto AttachSourceToken = "Attach"s;
 static constexpr auto ModelToken = "MODEL"sv;
+static constexpr auto SinkToken = "SINK"sv;
 static constexpr auto QueryToken = "SELECT"s;
 static constexpr auto ResultDelimiter = "----"s;
 static constexpr auto ErrorToken = "ERROR"s;
@@ -271,6 +292,8 @@ void SystestParser::parse()
             case TokenType::CREATE: {
                 auto [query, testData] = expectCreateStatement();
                 onCreateCallback(query, testData);
+                break;
+            }
             case TokenType::ATTACH_SOURCE: {
                 if (onAttachSourceCallback)
                 {
@@ -326,9 +349,12 @@ void SystestParser::parse()
                 {
                     ++currentLine;
                     auto expectation = expectError();
-                    if (onErrorExpectationCallback)
                     {
-                        onErrorExpectationCallback(expectation, queryIdAssigner.getNextQueryResultNumber());
+                        auto qid = queryIdAssigner.getNextQueryResultNumber();
+                        if (onErrorExpectationCallback)
+                        {
+                            onErrorExpectationCallback(expectation, qid);
+                        }
                     }
                 }
                 else
@@ -359,6 +385,10 @@ void SystestParser::parse()
             case TokenType::ERROR_EXPECTATION:
                 throw TestException(
                     "Should never run into the ERROR_EXPECTATION token during systest file parsing, but got line: {}", lines[currentLine]);
+            case TokenType::INVALID: {
+                // Should not happen because getNextToken filters invalid lines, but handle to satisfy -Wswitch
+                break;
+            }
         }
     }
 }
@@ -447,8 +477,6 @@ std::optional<TokenType> SystestParser::peekToken() const
 
     INVARIANT(!line.empty(), "a potential token should never be empty");
     return getTokenIfValid(line);
-    INVARIANT(!potentialToken.empty(), "a potential token should never be empty");
-    return getTokenIfValid(potentialToken);
 }
 
 SystestParser::SystestSink SystestParser::expectSink() const
@@ -565,7 +593,8 @@ std::pair<SystestParser::SystestLogicalSource, std::optional<SystestAttachSource
     }
     source.name = attachSourceTokens.at(1);
 
-    if (const auto dataIngestionType = magic_enum::enum_cast<NES::TestDataIngestionType>(NES::Util::toUpperCase(attachSourceTokens.back())))
+    if (const auto dataIngestionType = magic_enum::enum_cast<NES::Systest::TestDataIngestionType>(
+            NES::Util::toUpperCase(attachSourceTokens.back())))
     {
         const std::vector<std::string> arguments = attachSourceTokens | std::views::drop(2)
             | std::views::take(std::ranges::size(attachSourceTokens) - 3) | std::ranges::to<std::vector<std::string>>();

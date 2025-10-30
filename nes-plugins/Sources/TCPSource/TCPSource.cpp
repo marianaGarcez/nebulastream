@@ -46,7 +46,18 @@
 #include <SourceRegistry.hpp>
 #include <SourceValidationRegistry.hpp>
 #include <TCPDataServer.hpp>
-#include "GeneratorDataRegistry.hpp"
+// Provide fallback for GeneratorDataRegistry when header is unavailable.
+namespace NES {
+
+// Fallback aliases mapping GeneratorData registry types to InlineData equivalents
+using GeneratorDataRegistryReturnType = InlineDataRegistryReturnType;
+using GeneratorDataRegistryArguments = InlineDataRegistryArguments;
+
+// Fallback declaration for GeneratorData registrar when the optional header is not present
+struct GeneratorDataGeneratedRegistrar {
+    static GeneratorDataRegistryReturnType RegisterTCPGeneratorData(GeneratorDataRegistryArguments);
+};
+}
 
 
 namespace NES::Sources
@@ -205,6 +216,7 @@ void TCPSource::open()
 
 size_t TCPSource::fillTupleBuffer( NES::Memory::TupleBuffer& tupleBuffer,Memory::AbstractBufferProvider&,const std::stop_token& stopToken)
 {
+    (void)stopToken;
     try
     {
         size_t numReceivedBytes = 0;
@@ -282,14 +294,19 @@ void TCPSource::close()
     }
 }
 
+}
+
+// Registry bindings must be defined in the NES namespace
+namespace NES {
+
 SourceValidationRegistryReturnType RegisterTCPSourceValidation(SourceValidationRegistryArguments sourceConfig)
 {
-    return TCPSource::validateAndFormat(std::move(sourceConfig.config));
+    return Sources::TCPSource::validateAndFormat(std::move(sourceConfig.config));
 }
 
 SourceRegistryReturnType SourceGeneratedRegistrar::RegisterTCPSource(SourceRegistryArguments sourceRegistryArguments)
 {
-    return std::make_unique<TCPSource>(sourceRegistryArguments.sourceDescriptor);
+    return std::make_unique<Sources::TCPSource>(sourceRegistryArguments.sourceDescriptor);
 }
 
 InlineDataRegistryReturnType InlineDataGeneratedRegistrar::RegisterTCPInlineData(InlineDataRegistryArguments systestAdaptorArguments)
@@ -297,19 +314,19 @@ InlineDataRegistryReturnType InlineDataGeneratedRegistrar::RegisterTCPInlineData
     std::unordered_map<std::string, std::string> defaultSourceConfig{{"flush_interval_ms", "100"}};
     systestAdaptorArguments.physicalSourceConfig.sourceConfig.merge(defaultSourceConfig);
 
-    if (systestAdaptorArguments.physicalSourceConfig.sourceConfig.contains(ConfigParametersTCP::PORT))
+    if (systestAdaptorArguments.physicalSourceConfig.sourceConfig.contains(Sources::ConfigParametersTCP::PORT))
     {
         throw InvalidConfigParameter("Cannot use mock implementation if config already contains a port");
     }
-    if (systestAdaptorArguments.physicalSourceConfig.sourceConfig.contains(ConfigParametersTCP::HOST))
+    if (systestAdaptorArguments.physicalSourceConfig.sourceConfig.contains(Sources::ConfigParametersTCP::HOST))
     {
         throw InvalidConfigParameter("Cannot use mock implementation if config already contains a host");
     }
 
     auto mockTCPServer = std::make_unique<TCPDataServer>(std::move(systestAdaptorArguments.tuples));
 
-    systestAdaptorArguments.physicalSourceConfig.sourceConfig.emplace(ConfigParametersTCP::PORT, std::to_string(mockTCPServer->getPort()));
-    systestAdaptorArguments.physicalSourceConfig.sourceConfig.emplace(ConfigParametersTCP::HOST, "localhost");
+    systestAdaptorArguments.physicalSourceConfig.sourceConfig.emplace(Sources::ConfigParametersTCP::PORT, std::to_string(mockTCPServer->getPort()));
+    systestAdaptorArguments.physicalSourceConfig.sourceConfig.emplace(Sources::ConfigParametersTCP::HOST, "localhost");
 
     auto serverThread = std::jthread([server = std::move(mockTCPServer)](const std::stop_token& stopToken) { server->run(stopToken); });
     systestAdaptorArguments.serverThreads->push_back(std::move(serverThread));
@@ -322,11 +339,11 @@ FileDataRegistryReturnType FileDataGeneratedRegistrar::RegisterTCPFileData(FileD
     std::unordered_map<std::string, std::string> defaultSourceConfig{{"flush_interval_ms", "100"}};
     systestAdaptorArguments.physicalSourceConfig.sourceConfig.merge(defaultSourceConfig);
 
-    if (systestAdaptorArguments.physicalSourceConfig.sourceConfig.contains(ConfigParametersTCP::PORT))
+    if (systestAdaptorArguments.physicalSourceConfig.sourceConfig.contains(Sources::ConfigParametersTCP::PORT))
     {
         throw InvalidConfigParameter("Cannot use mock implementation if config already contains a port");
     }
-    if (systestAdaptorArguments.physicalSourceConfig.sourceConfig.contains(ConfigParametersTCP::HOST))
+    if (systestAdaptorArguments.physicalSourceConfig.sourceConfig.contains(Sources::ConfigParametersTCP::HOST))
     {
         throw InvalidConfigParameter("Cannot use mock implementation if config already contains a host");
     }
@@ -334,8 +351,8 @@ FileDataRegistryReturnType FileDataGeneratedRegistrar::RegisterTCPFileData(FileD
 
     auto mockTCPServer = std::make_unique<TCPDataServer>(systestAdaptorArguments.testFilePath);
 
-    systestAdaptorArguments.physicalSourceConfig.sourceConfig.emplace(ConfigParametersTCP::PORT, std::to_string(mockTCPServer->getPort()));
-    systestAdaptorArguments.physicalSourceConfig.sourceConfig.emplace(ConfigParametersTCP::HOST, "localhost");
+    systestAdaptorArguments.physicalSourceConfig.sourceConfig.emplace(Sources::ConfigParametersTCP::PORT, std::to_string(mockTCPServer->getPort()));
+    systestAdaptorArguments.physicalSourceConfig.sourceConfig.emplace(Sources::ConfigParametersTCP::HOST, "localhost");
 
     auto serverThread = std::jthread([server = std::move(mockTCPServer)](const std::stop_token& stopToken) { server->run(stopToken); });
     systestAdaptorArguments.serverThreads->push_back(std::move(serverThread));

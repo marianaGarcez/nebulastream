@@ -45,6 +45,7 @@ AggregationOperatorHandler::AggregationOperatorHandler(
     std::unique_ptr<WindowSlicesStoreInterface> sliceAndWindowStore,
     bool sequentialProcessing)
     : WindowBasedOperatorHandler(inputOrigins, outputOriginId, std::move(sliceAndWindowStore), sequentialProcessing)
+    , rollingAverageNumberOfKeys(RollingAverage<uint64_t>{100})
 {
 }
 

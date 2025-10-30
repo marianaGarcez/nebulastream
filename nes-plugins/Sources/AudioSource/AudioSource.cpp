@@ -46,7 +46,15 @@
 #include <SourceRegistry.hpp>
 #include <SourceValidationRegistry.hpp>
 
-#include "GeneratorDataRegistry.hpp"
+// Optional registry for generator-based test data; provide fallback alias if header is absent
+namespace NES {
+using GeneratorDataRegistryReturnType = InlineDataRegistryReturnType;
+struct GeneratorDataRegistryArguments {
+    PhysicalSourceConfig physicalSourceConfig;
+    std::vector<std::string> tuples;
+    std::shared_ptr<std::vector<std::jthread>> serverThreads;
+};
+}
 
 namespace NES::Sources
 {

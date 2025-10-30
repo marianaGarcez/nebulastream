@@ -21,8 +21,8 @@
 #include <utility>
 
 #include <MemoryLayout/ColumnLayout.hpp>
-#include <Nautilus/Interface/MemoryProvider/ColumnTupleBufferMemoryProvider.hpp>
-#include <Nautilus/Interface/MemoryProvider/TupleBufferMemoryProvider.hpp>
+#include <Nautilus/Interface/BufferRef/ColumnTupleBufferRef.hpp>
+#include <Nautilus/Interface/BufferRef/TupleBufferRef.hpp>
 #include <Nautilus/Interface/PagedVector/PagedVector.hpp>
 #include <Nautilus/Interface/PagedVector/PagedVectorRef.hpp>
 #include <Nautilus/Interface/Record.hpp>
@@ -43,7 +43,7 @@ TemporalSequenceAggregationPhysicalFunction::TemporalSequenceAggregationPhysical
     DataType resultType,
     PhysicalFunction inputFunction,
     Nautilus::Record::RecordFieldIdentifier resultFieldIdentifier,
-    std::shared_ptr<Nautilus::Interface::MemoryProvider::TupleBufferMemoryProvider> memProviderPagedVector)
+    std::shared_ptr<Nautilus::Interface::BufferRef::TupleBufferRef> memProviderPagedVector)
     : AggregationPhysicalFunction(std::move(inputType), std::move(resultType), std::move(inputFunction), std::move(resultFieldIdentifier))
     , memProviderPagedVector(std::move(memProviderPagedVector))
 {
@@ -156,13 +156,13 @@ void TemporalSequenceAggregationPhysicalFunction::cleanup(nautilus::val<Aggregat
 AggregationPhysicalFunctionRegistryReturnType AggregationPhysicalFunctionGeneratedRegistrar::RegisterTemporalSequenceAggregationPhysicalFunction(
     AggregationPhysicalFunctionRegistryArguments arguments)
 {
-    INVARIANT(arguments.memProviderPagedVector.has_value(), "Memory provider paged vector not set");
+    INVARIANT(arguments.bufferRefPagedVector.has_value(), "Memory provider paged vector not set");
     return std::make_shared<TemporalSequenceAggregationPhysicalFunction>(
         std::move(arguments.inputType),
         std::move(arguments.resultType),
         arguments.inputFunction,
         arguments.resultFieldIdentifier,
-        arguments.memProviderPagedVector.value());
+        arguments.bufferRefPagedVector.value());
 }
 
 }
