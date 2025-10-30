@@ -36,7 +36,7 @@ RewriteRuleResultSubgraph LowerToPhysicalIngestionTimeWatermarkAssigner::apply(L
 
     /// Creates a physical leaf for each logical leaf. Required, as this operator can have any number of sources.
     std::vector leafes(logicalOperator.getChildren().size(), wrapper);
-    return {.root = wrapper, .leafs = {leafes}};
+    return {.root = wrapper, .leafs = leafes};
 }
 
 std::unique_ptr<AbstractRewriteRule>

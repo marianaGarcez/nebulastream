@@ -230,7 +230,7 @@ RewriteRuleResultSubgraph LowerToPhysicalWindowedAggregation::apply(LogicalOpera
 
     /// Creates a physical leaf for each logical leaf. Required, as this operator can have any number of sources.
     std::vector leafes(logicalOperator.getChildren().size(), buildWrapper);
-    return {.root = probeWrapper, .leafs = {leafes}};
+    return {.root = probeWrapper, .leafs = leafes};
 }
 
 std::unique_ptr<AbstractRewriteRule>
