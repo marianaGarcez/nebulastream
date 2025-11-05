@@ -13,6 +13,7 @@
 add_subdirectory(BooleanFunctions)
 add_subdirectory(ArithmeticalFunctions)
 add_subdirectory(ComparisonFunctions)
+add_subdirectory(Meos)
 
 add_source_files(nes-logical-operators
         LogicalFunction.cpp

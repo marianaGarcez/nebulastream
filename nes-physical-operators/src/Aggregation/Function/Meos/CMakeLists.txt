@@ -10,16 +10,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_source_files(nes-physical-operators
-        FunctionProvider.cpp
-        FieldAccessPhysicalFunction.cpp
-        ConstantValueVariableSizePhysicalFunction.cpp
-        CastFieldPhysicalFunction.cpp
-        )
-
-add_plugin(Concat PhysicalFunction nes-physical-operators ConcatPhysicalFunction.cpp)
-
-add_subdirectory(ArithmeticalFunctions)
-add_subdirectory(ComparisonFunctions)
-add_subdirectory(BooleanFunctions)
-add_subdirectory(Meos)
+add_plugin(TemporalSequence AggregationPhysicalFunction nes-physical-operators TemporalSequenceAggregationPhysicalFunction.cpp)
+add_plugin(Var AggregationPhysicalFunction nes-physical-operators VarAggregationFunction.cpp)
