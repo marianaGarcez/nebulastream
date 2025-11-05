@@ -21,34 +21,25 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Install Nix
-        run: |
-          # Install Nix in the container
-          curl -L https://nixos.org/nix/install | sh -s -- --daemon --yes
-          . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
-          
-          # Enable flakes
-          mkdir -p ~/.config/nix
-          echo "experimental-features = nix-command flakes" > ~/.config/nix/nix.conf
+      - uses: DeterminateSystems/nix-installer-action@main
 
-      - name: Build with Nix
+      - name: Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@v13
+
+      - name: Configure via devShell
         run: |
-          # Source Nix environment
-          . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
-          
-          # Configure the project
           ./.nix/nix-cmake.sh -DCMAKE_BUILD_TYPE=Debug -G Ninja -S . -B cmake-build-nix
-                      
-          # Build the project
-          ./.nix/nix-cmake.sh --build cmake-build-nix --target nes-single-node-worker -j$(nproc)
+
+      - name: Build via devShell
+        run: |
+          ./.nix/nix-cmake.sh --build cmake-build-nix --target nes-single-node-worker -j"$(nproc)"
 
       - name: Upload build artifacts on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: nix-build-logs-${{ matrix.os }}
+          name: nix-build-logs
           path: |
             cmake-build-nix/CMakeFiles/CMakeOutput.log
             cmake-build-nix/CMakeFiles/CMakeError.log
-            vcpkg-repository/buildtrees/**/*.log
           retention-days: 7

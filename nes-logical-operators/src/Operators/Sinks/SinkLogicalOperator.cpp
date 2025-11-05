@@ -15,6 +15,7 @@
 #include <Operators/Sinks/SinkLogicalOperator.hpp>
 
 #include <algorithm>
+#include <memory>
 #include <optional>
 #include <ranges>
 #include <sstream>
@@ -92,7 +93,11 @@ SinkLogicalOperator SinkLogicalOperator::withInferredSchema(std::vector<Schema> 
         }
     }
 
-    if (copy.sinkDescriptor.has_value() && *copy.sinkDescriptor->getSchema() != firstSchema)
+    if (sinkDescriptor.has_value() && sinkDescriptor.value().isInline() && sinkDescriptor.value().getSchema()->getFields().empty())
+    {
+        copy.sinkDescriptor->schema = std::make_shared<const Schema>(firstSchema);
+    }
+    else if (copy.sinkDescriptor.has_value() && *copy.sinkDescriptor->getSchema() != firstSchema)
     {
         std::vector expectedFields(copy.sinkDescriptor.value().getSchema()->begin(), copy.sinkDescriptor.value().getSchema()->end());
         std::vector actualFields(firstSchema.begin(), firstSchema.end());

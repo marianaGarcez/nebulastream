@@ -16,7 +16,9 @@
 
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
+#include <DataTypes/Schema.hpp>
 #include <Functions/FieldAccessLogicalFunction.hpp>
 #include <Functions/LogicalFunction.hpp>
 #include <Operators/LogicalOperator.hpp>
@@ -36,6 +38,12 @@ public:
     /// Creates a query plan from a particular source. The source is identified by its name.
     /// During query processing the underlying source descriptor is retrieved from the source catalog.
     static LogicalPlan createLogicalPlan(std::string logicalSourceName);
+
+    static LogicalPlan createLogicalPlan(
+        std::string inlineSourceType,
+        const Schema& schema,
+        std::unordered_map<std::string, std::string> sourceConfig,
+        std::unordered_map<std::string, std::string> parserConfig);
 
     /// @brief this call projects out the attributes in the parameter list
     /// @param functions list of attributes
@@ -77,6 +85,8 @@ public:
         JoinLogicalOperator::JoinType joinType);
 
     static LogicalPlan addSink(std::string sinkName, const LogicalPlan& queryPlan);
+    static LogicalPlan addInlineSink(
+        std::string type, const Schema& schema, std::unordered_map<std::string, std::string> sinkConfig, const LogicalPlan& queryPlan);
 
     /// Checks in case a window is contained in the query.
     /// If a watermark operator exists in the queryPlan and if not adds a watermark strategy to the queryPlan.

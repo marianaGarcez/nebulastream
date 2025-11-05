@@ -33,10 +33,12 @@
 #include <Runtime/AbstractBufferProvider.hpp>
 #include <Runtime/TupleBuffer.hpp>
 #include <Sources/SourceDescriptor.hpp>
+#include <Util/Logger/Logger.hpp>
 #include <Concepts.hpp>
 #include <ErrorHandling.hpp>
 #include <FieldIndexFunction.hpp>
 #include <PipelineExecutionContext.hpp>
+#include <RawTupleBuffer.hpp>
 #include <RawValueParser.hpp>
 #include <SequenceShredder.hpp>
 
@@ -126,8 +128,7 @@ void processSpanningTuple(
     spanningTupleStringStream << indexerMetaData.getTupleDelimitingBytes();
 
     const auto& firstBuffer = stagedBuffersSpan.front();
-    const auto firstSpanningTuple
-        = (firstBuffer.isValidRawBuffer()) ? firstBuffer.getTrailingBytes(indexerMetaData.getTupleDelimitingBytes().size()) : "";
+    const auto firstSpanningTuple = firstBuffer.getTrailingBytes(indexerMetaData.getTupleDelimitingBytes().size());
     spanningTupleStringStream << firstSpanningTuple;
 
     /// Process all buffers in-between the first and the last
@@ -176,6 +177,7 @@ public:
         , indexerMetaData(typename FormatterType::IndexerMetaData{parserConfig, schema})
         /// Only if we need to resolve spanning tuples, we need the SequenceShredder
         , sequenceShredder(hasSpanningTuple() ? std::make_unique<SequenceShredder>(parserConfig.tupleDelimiter.size()) : nullptr)
+
         /// Since we know the schema, we can create a vector that contains a function that converts the string representation of a field value
         /// to our internal representation in the correct order. During parsing, we iterate over the fields in each tuple, and, using the current
         /// field number, load the correct function for parsing from the vector.
@@ -203,10 +205,6 @@ public:
         if constexpr (hasSpanningTuple())
         {
             INVARIANT(sequenceShredder != nullptr, "The SequenceShredder handles spanning tuples, thus it must not be null.");
-            if (not sequenceShredder->validateState())
-            {
-                throw FormattingError("Failed to validate SequenceShredder.");
-            }
         }
     }
 
@@ -239,15 +237,6 @@ public:
     void executeTask(const RawTupleBuffer& rawBuffer, PipelineExecutionContext& pec)
     requires(FormatterType::IsFormattingRequired and hasSpanningTuple())
     {
-        /// Check if the current sequence number is in the range of the ring buffer of the sequence shredder.
-        /// If not (should very rarely be the case), we put the task back.
-        /// After enough out-of-range requests, the SequenceShredder increases the size of its ring buffer.
-        if (not sequenceShredder->isInRange(rawBuffer.getSequenceNumber().getRawValue()))
-        {
-            rawBuffer.repeat(pec);
-            return;
-        }
-
         /// Get field delimiter indices of the raw buffer by using the InputFormatIndexer implementation
         auto fieldIndexFunction = typename FormatterType::FieldIndexFunctionType(*pec.getBufferManager());
         inputFormatIndexer.indexRawBuffer(fieldIndexFunction, rawBuffer, indexerMetaData);
@@ -350,21 +339,21 @@ private:
         PipelineExecutionContext& pec) const
     {
         const auto bufferProvider = pec.getBufferManager();
-        const auto [indexOfSequenceNumberInStagedBuffers, stagedBuffers] = sequenceShredder->processSequenceNumber<true>(
-            StagedBuffer{
-                rawBuffer,
-                rawBuffer.getNumberOfBytes(),
-                fieldIndexFunction.getOffsetOfFirstTupleDelimiter(),
-                fieldIndexFunction.getOffsetOfLastTupleDelimiter()},
-            rawBuffer.getSequenceNumber().getRawValue());
+        auto [isInRange, leadingSTBuffers] = sequenceShredder->findLeadingSTWithDelimiter(StagedBuffer{
+            rawBuffer, fieldIndexFunction.getOffsetOfFirstTupleDelimiter(), fieldIndexFunction.getOffsetOfLastTupleDelimiter()});
+        if (not isInRange)
+        {
+            NES_WARNING("Sequence Number {} was out of range", rawBuffer.getSequenceNumber().getRawValue());
+            rawBuffer.repeat(pec);
+            return;
+        }
 
         /// 1. process leading spanning tuple if required
         auto formattedBuffer = bufferProvider->getBufferBlocking();
-        if (/* hasLeadingSpanningTuple */ indexOfSequenceNumberInStagedBuffers != 0)
+        if (/* hasLeadingSpanningTuple */ leadingSTBuffers.hasSpanningTuple())
         {
-            const auto spanningTupleBuffers = std::span{stagedBuffers}.subspan(0, indexOfSequenceNumberInStagedBuffers + 1);
             processSpanningTuple<FormatterType>(
-                spanningTupleBuffers,
+                leadingSTBuffers.getSpanningBuffers(),
                 *bufferProvider,
                 formattedBuffer,
                 this->schemaInfo,
@@ -380,7 +369,8 @@ private:
         }
 
         /// 3. process trailing spanning tuple if required
-        if (/* hasTrailingSpanningTuple */ indexOfSequenceNumberInStagedBuffers < (stagedBuffers.size() - 1))
+        if (const auto trailingSTBuffers = sequenceShredder->findTrailingSTWithDelimiter(rawBuffer.getSequenceNumber());
+            trailingSTBuffers.hasSpanningTuple())
         {
             const auto numBytesInFormattedBuffer = formattedBuffer.getNumberOfTuples() * this->schemaInfo.getSizeOfTupleInBytes();
             if (formattedBuffer.getBufferSize() - numBytesInFormattedBuffer < this->schemaInfo.getSizeOfTupleInBytes())
@@ -390,11 +380,8 @@ private:
                 formattedBuffer = bufferProvider->getBufferBlocking();
             }
 
-            const auto spanningTupleBuffers
-                = std::span(stagedBuffers)
-                      .subspan(indexOfSequenceNumberInStagedBuffers, stagedBuffers.size() - indexOfSequenceNumberInStagedBuffers);
             processSpanningTuple<FormatterType>(
-                spanningTupleBuffers,
+                trailingSTBuffers.getSpanningBuffers(),
                 *bufferProvider,
                 formattedBuffer,
                 this->schemaInfo,
@@ -419,21 +406,22 @@ private:
         PipelineExecutionContext& pec) const
     {
         const auto bufferProvider = pec.getBufferManager();
-        const auto [indexOfSequenceNumberInStagedBuffers, stagedBuffers] = sequenceShredder->processSequenceNumber<false>(
-            StagedBuffer{
-                rawBuffer,
-                rawBuffer.getNumberOfBytes(),
-                fieldIndexFunction.getOffsetOfFirstTupleDelimiter(),
-                fieldIndexFunction.getOffsetOfLastTupleDelimiter()},
-            rawBuffer.getSequenceNumber().getRawValue());
-        if (stagedBuffers.size() < 3)
+        auto [isInRange, stagedBuffers] = sequenceShredder->findSTWithoutDelimiter(StagedBuffer{
+            rawBuffer, fieldIndexFunction.getOffsetOfFirstTupleDelimiter(), fieldIndexFunction.getOffsetOfLastTupleDelimiter()});
+        if (not isInRange)
+        {
+            rawBuffer.repeat(pec);
+            return;
+        }
+
+        if (stagedBuffers.getSize() < 3)
         {
             return;
         }
         /// If there is a spanning tuple, get a new buffer for formatted data and process the spanning tuples
         auto formattedBuffer = bufferProvider->getBufferBlocking();
         processSpanningTuple<FormatterType>(
-            stagedBuffers,
+            stagedBuffers.getSpanningBuffers(),
             *bufferProvider,
             formattedBuffer,
             this->schemaInfo,

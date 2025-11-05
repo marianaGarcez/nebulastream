@@ -14,6 +14,7 @@
 
 #include <Sinks/SinkDescriptor.hpp>
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <ostream>
@@ -21,9 +22,12 @@
 #include <string_view>
 #include <unordered_map>
 #include <utility>
+#include <variant>
+
 #include <Configurations/Descriptor.hpp>
 #include <DataTypes/Schema.hpp>
 #include <Serialization/SchemaSerializationUtil.hpp>
+#include <Util/Overloaded.hpp>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 #include <ErrorHandling.hpp>
@@ -34,7 +38,8 @@
 namespace NES
 {
 
-SinkDescriptor::SinkDescriptor(std::string sinkName, const Schema& schema, const std::string_view sinkType, DescriptorConfig::Config config)
+SinkDescriptor::SinkDescriptor(
+    std::variant<std::string, uint64_t> sinkName, const Schema& schema, const std::string_view sinkType, DescriptorConfig::Config config)
     : Descriptor(std::move(config)), sinkName(std::move(sinkName)), schema(std::make_shared<Schema>(schema)), sinkType(sinkType)
 {
 }
@@ -51,7 +56,17 @@ std::string SinkDescriptor::getSinkType() const
 
 std::string SinkDescriptor::getSinkName() const
 {
-    return sinkName;
+    return std::visit(
+        Overloaded{
+            [](const std::string& name) { return name; },
+            [](const uint64_t& name) { return std::to_string(name); },
+        },
+        sinkName);
+}
+
+bool SinkDescriptor::isInline() const
+{
+    return std::holds_alternative<uint64_t>(this->sinkName);
 }
 
 std::optional<DescriptorConfig::Config>
@@ -79,7 +94,7 @@ bool operator==(const SinkDescriptor& lhs, const SinkDescriptor& rhs)
 SerializableSinkDescriptor SinkDescriptor::serialize() const
 {
     SerializableSinkDescriptor serializedSinkDescriptor;
-    serializedSinkDescriptor.set_sinkname(sinkName);
+    serializedSinkDescriptor.set_sinkname(getSinkName());
     SchemaSerializationUtil::serializeSchema(*schema, serializedSinkDescriptor.mutable_sinkschema());
     serializedSinkDescriptor.set_sinktype(sinkType);
     /// Iterate over SinkDescriptor config and serialize all key-value pairs.

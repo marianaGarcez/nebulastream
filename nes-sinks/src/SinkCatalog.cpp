@@ -62,6 +62,23 @@ std::optional<SinkDescriptor> SinkCatalog::getSinkDescriptor(const std::string& 
     return sinkDescriptorOpt->second;
 }
 
+std::optional<SinkDescriptor>
+SinkCatalog::getInlineSink(const Schema& schema, std::string_view sinkType, std::unordered_map<std::string, std::string> config) const
+{
+    auto descriptorConfigOpt = SinkDescriptor::validateAndFormatConfig(sinkType, std::move(config));
+
+    const auto inlineSinkId = InlineSinkId{nextInlineSinkId.fetch_add(1)};
+
+    if (not descriptorConfigOpt.has_value())
+    {
+        return std::nullopt;
+    }
+
+    auto sinkDescriptor = SinkDescriptor{inlineSinkId.getRawValue(), schema, sinkType, std::move(descriptorConfigOpt.value())};
+
+    return sinkDescriptor;
+}
+
 bool SinkCatalog::removeSinkDescriptor(const std::string& sinkName)
 {
     const auto lockedSinks = sinks.wlock();
@@ -71,7 +88,7 @@ bool SinkCatalog::removeSinkDescriptor(const std::string& sinkName)
 bool SinkCatalog::removeSinkDescriptor(const SinkDescriptor& sinkDescriptor)
 {
     const auto lockedSinks = sinks.wlock();
-    return lockedSinks->erase(sinkDescriptor.sinkName) == 1;
+    return lockedSinks->erase(sinkDescriptor.getSinkName()) == 1;
 }
 
 bool SinkCatalog::containsSinkDescriptor(const std::string& sinkName) const
@@ -83,7 +100,7 @@ bool SinkCatalog::containsSinkDescriptor(const std::string& sinkName) const
 bool SinkCatalog::containsSinkDescriptor(const SinkDescriptor& sinkDescriptor) const
 {
     const auto lockedSinks = sinks.rlock();
-    return lockedSinks->contains(sinkDescriptor.sinkName);
+    return lockedSinks->contains(sinkDescriptor.getSinkName());
 }
 
 std::vector<SinkDescriptor> SinkCatalog::getAllSinkDescriptors() const

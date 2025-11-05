@@ -15,11 +15,14 @@
 
 #include <stack>
 #include <string>
+#include <utility>
+#include <variant>
 #include <vector>
 #include <AntlrSQLBaseListener.h>
 #include <AntlrSQLParser.h>
 #include <AntlrSQLParser/AntlrSQLHelper.hpp>
 #include <Plans/LogicalPlan.hpp>
+#include <CommonParserFunctions.hpp>
 
 namespace NES::Parsers
 {
@@ -27,7 +30,7 @@ namespace NES::Parsers
 class AntlrSQLQueryPlanCreator final : public AntlrSQLBaseListener
 {
     std::stack<AntlrSQLHelper> helpers;
-    std::vector<std::string> sinkNames;
+    std::vector<std::variant<std::string, std::pair<std::string, ConfigMap>>> sinks;
     std::stack<LogicalPlan> queryPlans;
 
 public:
@@ -77,6 +80,7 @@ public:
     void exitLogicalNot(AntlrSQLParser::LogicalNotContext* context) override;
     void exitConstantDefault(AntlrSQLParser::ConstantDefaultContext* context) override;
     void exitThresholdMinSizeParameter(AntlrSQLParser::ThresholdMinSizeParameterContext* context) override;
+    void enterInlineSource(AntlrSQLParser::InlineSourceContext* context) override;
 };
 
 }

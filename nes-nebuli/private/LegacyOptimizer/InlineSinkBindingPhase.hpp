@@ -15,30 +15,24 @@
 #pragma once
 #include <memory>
 #include <utility>
-
 #include <Plans/LogicalPlan.hpp>
+#include <Sinks/SinkCatalog.hpp>
 
 namespace NES
 {
-class SinkCatalog;
-class SourceCatalog;
-}
 
-namespace NES
-{
-class LegacyOptimizer
+/// The InlineSinkBindingPhase replaces all sink that are defined within the query itself (InlineSinkLogicalOperators), as opposed to
+/// sinks that are created in separate CREATE statements, with SinkLogicalOperators based on the given inline sink configuration.
+
+class InlineSinkBindingPhase
 {
 public:
-    [[nodiscard]] LogicalPlan optimize(const LogicalPlan& plan) const;
-    LegacyOptimizer() = default;
+    explicit InlineSinkBindingPhase(std::shared_ptr<const SinkCatalog> sinkCatalog) : sinkCatalog(std::move(sinkCatalog)) { }
 
-    explicit LegacyOptimizer(std::shared_ptr<SourceCatalog> sourceCatalog, std::shared_ptr<SinkCatalog> sinkCatalog)
-        : sourceCatalog(std::move(sourceCatalog)), sinkCatalog(std::move(sinkCatalog))
-    {
-    }
+    void apply(LogicalPlan& queryPlan) const;
 
 private:
-    std::shared_ptr<const SourceCatalog> sourceCatalog;
     std::shared_ptr<const SinkCatalog> sinkCatalog;
 };
+
 }

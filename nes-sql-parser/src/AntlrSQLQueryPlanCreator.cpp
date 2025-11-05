@@ -22,6 +22,8 @@
 #include <ranges>
 #include <string>
 #include <utility>
+#include <variant>
+
 #include <AntlrSQLBaseListener.h>
 #include <AntlrSQLLexer.h>
 #include <AntlrSQLParser.h>
@@ -29,6 +31,7 @@
 #include <AntlrSQLParser/AntlrSQLHelper.hpp>
 #include <DataTypes/DataType.hpp>
 #include <DataTypes/DataTypeProvider.hpp>
+#include <DataTypes/Schema.hpp>
 #include <Functions/ArithmeticalFunctions/AddLogicalFunction.hpp>
 #include <Functions/ArithmeticalFunctions/DivLogicalFunction.hpp>
 #include <Functions/ArithmeticalFunctions/ModuloLogicalFunction.hpp>
@@ -57,6 +60,7 @@
 #include <Operators/Windows/JoinLogicalOperator.hpp>
 #include <Plans/LogicalPlan.hpp>
 #include <Plans/LogicalPlanBuilder.hpp>
+#include <Util/Overloaded.hpp>
 #include <Util/Strings.hpp>
 #include <WindowTypes/Measures/TimeCharacteristic.hpp>
 #include <WindowTypes/Measures/TimeMeasure.hpp>
@@ -64,38 +68,15 @@
 #include <WindowTypes/Types/TumblingWindow.hpp>
 #include <fmt/format.h>
 #include <fmt/ranges.h>
+#include <CommonParserFunctions.hpp>
 #include <ErrorHandling.hpp>
 #include <ParserUtil.hpp>
 
 namespace NES::Parsers
 {
-
-namespace
-{
-std::string parseIdentifier(AntlrSQLParser::IdentifierContext* identifier)
-{
-    if (auto* const unquotedIdentifier = dynamic_cast<AntlrSQLParser::UnquotedIdentifierContext*>(identifier->strictIdentifier()))
-    {
-        std::string text = unquotedIdentifier->getText();
-        return text | std::ranges::views::transform([](const char character) { return std::toupper(character); })
-            | std::ranges::to<std::string>();
-    }
-    if (auto* const quotedIdentifier = dynamic_cast<AntlrSQLParser::QuotedIdentifierAlternativeContext*>(identifier->strictIdentifier()))
-    {
-        const auto withQuotationMarks = quotedIdentifier->quotedIdentifier()->BACKQUOTED_IDENTIFIER()->getText();
-        return withQuotationMarks.substr(1, withQuotationMarks.size() - 2);
-    }
-    INVARIANT(
-        false,
-        "Unknown identifier type, was neither valid quoted or unquoted, is the grammar out of sync with the binder or was a nullptr "
-        "passed?");
-    std::unreachable();
-}
-}
-
 LogicalPlan AntlrSQLQueryPlanCreator::getQueryPlan() const
 {
-    if (sinkNames.empty())
+    if (sinks.empty())
     {
         throw InvalidQuerySyntax("Query does not contain sink");
     }
@@ -104,8 +85,19 @@ LogicalPlan AntlrSQLQueryPlanCreator::getQueryPlan() const
         throw InvalidQuerySyntax("Query could not be parsed");
     }
     /// Todo #421: support multiple sinks
-    INVARIANT(!sinkNames.empty(), "Need at least one sink!");
-    return LogicalPlanBuilder::addSink(sinkNames.front(), queryPlans.top());
+    INVARIANT(!sinks.empty(), "Need at least one sink!");
+    return std::visit(
+        Overloaded{
+            [&](const std::string& sinkName) { return LogicalPlanBuilder::addSink(sinkName, queryPlans.top()); },
+            [&](const std::pair<std::string, ConfigMap>& inlineSink)
+            {
+                const auto& [type, configOptions] = inlineSink;
+                const auto sinkConfig = getSinkConfig(configOptions);
+                const auto schemaOpt = getSinkSchema(configOptions);
+                const Schema schema = (schemaOpt.has_value() ? schemaOpt.value() : Schema{});
+                return LogicalPlanBuilder::addInlineSink(type, schema, sinkConfig, queryPlans.top());
+            }},
+        sinks.front());
 }
 
 Windowing::TimeMeasure buildTimeMeasure(const int size, const uint64_t timebase)
@@ -190,8 +182,19 @@ void AntlrSQLQueryPlanCreator::enterSinkClause(AntlrSQLParser::SinkClauseContext
     /// Store all specified sinks.
     for (const auto& sink : context->sink())
     {
-        const auto sinkIdentifier = sink->identifier();
-        sinkNames.emplace_back(parseIdentifier(sinkIdentifier));
+        if (sink->identifier() != nullptr)
+        {
+            sinks.emplace_back(bindIdentifier(sink->identifier()));
+        }
+        else if (sink->inlineSink() != nullptr)
+        {
+            const auto& sinkInlineSink = sink->inlineSink();
+
+            const auto type = bindIdentifier(sinkInlineSink->type);
+            const auto configOptions = bindConfigOptions(sinkInlineSink->parameters->namedConfigExpression());
+
+            sinks.emplace_back(std::make_pair(type, configOptions));
+        }
     }
 }
 
@@ -375,18 +378,18 @@ void AntlrSQLQueryPlanCreator::enterIdentifier(AntlrSQLParser::IdentifierContext
     }
     if (helpers.top().isGroupBy)
     {
-        helpers.top().groupByFields.emplace_back(parseIdentifier(context));
+        helpers.top().groupByFields.emplace_back(bindIdentifier(context));
     }
     else if (
         (helpers.top().isWhereOrHaving || helpers.top().isSelect || helpers.top().isWindow)
         && AntlrSQLParser::RulePrimaryExpression == parentRuleIndex)
     {
-        helpers.top().functionBuilder.emplace_back(FieldAccessLogicalFunction(parseIdentifier(context)));
+        helpers.top().functionBuilder.emplace_back(FieldAccessLogicalFunction(bindIdentifier(context)));
     }
     else if (helpers.top().isFrom and not helpers.top().isJoinRelation and AntlrSQLParser::RuleErrorCapturingIdentifier == parentRuleIndex)
     {
         /// get main source name
-        helpers.top().setSource(parseIdentifier(context));
+        helpers.top().setSource(bindIdentifier(context));
     }
     else if (
         AntlrSQLParser::RuleNamedExpression == parentRuleIndex and helpers.top().isInFunctionCall() and not helpers.top().isJoinRelation
@@ -403,14 +406,14 @@ void AntlrSQLQueryPlanCreator::enterIdentifier(AntlrSQLParser::IdentifierContext
             /// (we handle cases where the user did not specify a name via 'AS' in 'exitNamedExpression')
             const auto attribute = std::move(helpers.top().functionBuilder.back());
             helpers.top().functionBuilder.pop_back();
-            helpers.top().addProjection(FieldIdentifier(parseIdentifier(context)), attribute);
+            helpers.top().addProjection(FieldIdentifier(bindIdentifier(context)), attribute);
         }
     }
     else if (helpers.top().isInAggFunction() and AntlrSQLParser::RuleNamedExpression == parentRuleIndex)
     {
         auto aggFunc = helpers.top().windowAggs.back();
         helpers.top().windowAggs.pop_back();
-        aggFunc->asField = (FieldAccessLogicalFunction(parseIdentifier(context)));
+        aggFunc->asField = (FieldAccessLogicalFunction(bindIdentifier(context)));
         helpers.top().windowAggs.push_back(aggFunc);
         INVARIANT(
             std::nullopt != helpers.top().functionBuilder.back().tryGet<FieldAccessLogicalFunction>(),
@@ -421,15 +424,15 @@ void AntlrSQLQueryPlanCreator::enterIdentifier(AntlrSQLParser::IdentifierContext
     }
     else if (helpers.top().isJoinRelation and AntlrSQLParser::RulePrimaryExpression == parentRuleIndex)
     {
-        helpers.top().joinKeyRelationHelper.emplace_back(FieldAccessLogicalFunction(parseIdentifier(context)));
+        helpers.top().joinKeyRelationHelper.emplace_back(FieldAccessLogicalFunction(bindIdentifier(context)));
     }
     else if (helpers.top().isJoinRelation and AntlrSQLParser::RuleErrorCapturingIdentifier == parentRuleIndex)
     {
-        helpers.top().joinSources.push_back(parseIdentifier(context));
+        helpers.top().joinSources.push_back(bindIdentifier(context));
     }
     else if (helpers.top().isJoinRelation and AntlrSQLParser::RuleTableAlias == parentRuleIndex)
     {
-        helpers.top().joinSourceRenames.push_back(parseIdentifier(context));
+        helpers.top().joinSourceRenames.push_back(bindIdentifier(context));
     }
 }
 
@@ -455,7 +458,23 @@ void AntlrSQLQueryPlanCreator::exitPrimaryQuery(AntlrSQLParser::PrimaryQueryCont
     }
     else
     {
-        queryPlan = LogicalPlanBuilder::createLogicalPlan(helpers.top().getSource());
+        if (helpers.top().getSource().empty())
+        {
+            const auto [type, configOptions] = helpers.top().getInlineSourceConfig();
+            const auto parserConfig = getParserConfig(configOptions);
+            const auto sourceConfig = getSourceConfig(configOptions);
+            const auto schema = getSourceSchema(configOptions);
+            if (!schema.has_value())
+            {
+                throw InvalidConfigParameter("Inline Source is missing schema definition");
+            }
+
+            queryPlan = LogicalPlanBuilder::createLogicalPlan(type, schema.value(), sourceConfig, parserConfig);
+        }
+        else
+        {
+            queryPlan = LogicalPlanBuilder::createLogicalPlan(helpers.top().getSource());
+        }
     }
 
     for (auto whereExpr = helpers.top().getWhereClauses().rbegin(); whereExpr != helpers.top().getWhereClauses().rend(); ++whereExpr)
@@ -547,7 +566,7 @@ void AntlrSQLQueryPlanCreator::exitAdvancebyParameter(AntlrSQLParser::AdvancebyP
 
 void AntlrSQLQueryPlanCreator::exitTimestampParameter(AntlrSQLParser::TimestampParameterContext* context)
 {
-    helpers.top().timestamp = parseIdentifier(context->name);
+    helpers.top().timestamp = bindIdentifier(context->name);
 }
 
 /// WINDOWS
@@ -892,6 +911,15 @@ void AntlrSQLQueryPlanCreator::exitFunctionCall(AntlrSQLParser::FunctionCallCont
 void AntlrSQLQueryPlanCreator::exitThresholdMinSizeParameter(AntlrSQLParser::ThresholdMinSizeParameterContext* context)
 {
     helpers.top().minimumCount = std::stoi(context->getText());
+}
+
+void AntlrSQLQueryPlanCreator::enterInlineSource(AntlrSQLParser::InlineSourceContext* context)
+{
+    const auto type = bindIdentifier(context->type);
+
+    const auto parameters = bindConfigOptions(context->parameters->namedConfigExpression());
+
+    helpers.top().setInlineSource(type, parameters);
 }
 
 void AntlrSQLQueryPlanCreator::enterSetOperation(AntlrSQLParser::SetOperationContext*)
