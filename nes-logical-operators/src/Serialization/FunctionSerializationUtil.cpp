@@ -13,6 +13,7 @@
 */
 
 #include <Serialization/FunctionSerializationUtil.hpp>
+#include <Serialization/TemporalAggregationSerde.hpp>
 
 #include <memory>
 #include <vector>
@@ -61,6 +62,23 @@ std::shared_ptr<WindowAggregationLogicalFunction>
 deserializeWindowAggregationFunction(const SerializableAggregationFunction& serializedFunction)
 {
     const auto& type = serializedFunction.type();
+
+    // Special handling for TemporalSequence: extra fields stored inside on_field.config
+    if (type == std::string("TemporalSequence"))
+    {
+        AggregationLogicalFunctionRegistryArguments args;
+        const auto fields = TemporalAggregationSerde::parseTemporalSequence(serializedFunction);
+        for (const auto& f : fields)
+        {
+            args.fields.push_back(f);
+        }
+        if (auto function = AggregationLogicalFunctionRegistry::instance().create(type, args))
+        {
+            return function.value();
+        }
+        throw UnknownLogicalOperator();
+    }
+
     auto onField = deserializeFunction(serializedFunction.on_field());
     auto asField = deserializeFunction(serializedFunction.as_field());
 

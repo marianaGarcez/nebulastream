@@ -34,7 +34,7 @@
 #include <Util/Logger/Logger.hpp>
 #include <PipelineExecutionContext.hpp>
 
-namespace NES::Sinks
+namespace NES
 {
 
 class MQTTSink : public Sink
@@ -50,10 +50,10 @@ public:
     MQTTSink& operator=(MQTTSink&&) = delete;
 
     void start(PipelineExecutionContext& pipelineExecutionContext) override;
-    void execute(const Memory::TupleBuffer& inputBuffer, PipelineExecutionContext& pipelineExecutionContext) override;
+    void execute(const TupleBuffer& inputBuffer, PipelineExecutionContext& pipelineExecutionContext) override;
     void stop(PipelineExecutionContext& pipelineExecutionContext) override;
 
-    static Configurations::DescriptorConfig::Config validateAndFormat(std::unordered_map<std::string, std::string> config);
+    static DescriptorConfig::Config validateAndFormat(std::unordered_map<std::string, std::string> config);
 
 protected:
     std::ostream& toString(std::ostream& str) const override;
@@ -105,7 +105,7 @@ static std::mt19937 gen(rd());
 static std::uniform_int_distribution<> dis(0, 15);
 static std::uniform_int_distribution<> dis2(8, 11);
 
-std::string generateUUID()
+inline std::string generateUUID()
 {
     std::stringstream ss;
     ss << std::hex;
@@ -140,13 +140,13 @@ std::string generateUUID()
 
 struct ConfigParametersMQTT
 {
-    static inline const Configurations::DescriptorConfig::ConfigParameter<std::string> SERVER_URI{
+    static inline const DescriptorConfig::ConfigParameter<std::string> SERVER_URI{
         "serverURI",
         std::nullopt,
         [](const std::unordered_map<std::string, std::string>& config)
-        { return Configurations::DescriptorConfig::tryGet(SERVER_URI, config); }};
+        { return DescriptorConfig::tryGet(SERVER_URI, config); }};
 
-    static inline const Configurations::DescriptorConfig::ConfigParameter<std::string> CLIENT_ID{
+    static inline const DescriptorConfig::ConfigParameter<std::string> CLIENT_ID{
         "clientId",
         "generated",
         [](const std::unordered_map<std::string, std::string>& config) -> std::optional<std::string>
@@ -158,12 +158,12 @@ struct ConfigParametersMQTT
             return detail::uuid::generateUUID();
         }};
 
-    static inline const Configurations::DescriptorConfig::ConfigParameter<std::string> TOPIC{
+    static inline const DescriptorConfig::ConfigParameter<std::string> TOPIC{
         "topic",
         std::nullopt,
-        [](const std::unordered_map<std::string, std::string>& config) { return Configurations::DescriptorConfig::tryGet(TOPIC, config); }};
+        [](const std::unordered_map<std::string, std::string>& config) { return DescriptorConfig::tryGet(TOPIC, config); }};
 
-    static inline const Configurations::DescriptorConfig::ConfigParameter<std::string> USERNAME{
+    static inline const DescriptorConfig::ConfigParameter<std::string> USERNAME{
         "username",
         std::nullopt,
         [](const std::unordered_map<std::string, std::string>& config) -> std::optional<std::string> {
@@ -173,7 +173,7 @@ struct ConfigParametersMQTT
             return std::nullopt;
         }};
 
-    static inline const Configurations::DescriptorConfig::ConfigParameter<std::string> PASSWORD{
+    static inline const DescriptorConfig::ConfigParameter<std::string> PASSWORD{
         "password",
         std::nullopt,
         [](const std::unordered_map<std::string, std::string>& config) -> std::optional<std::string> {
@@ -184,7 +184,7 @@ struct ConfigParametersMQTT
             return std::nullopt;
         }};
 
-    static inline const Configurations::DescriptorConfig::ConfigParameter<int32_t> QOS{
+    static inline const DescriptorConfig::ConfigParameter<int32_t> QOS{
         "qos",
         1,
         [](const std::unordered_map<std::string, std::string>& config) -> std::optional<uint8_t>
@@ -202,19 +202,19 @@ struct ConfigParametersMQTT
             return 1; // Default QOS value
         }};
 
-    static inline const Configurations::DescriptorConfig::ConfigParameter<bool> CLEAN_SESSION{
+    static inline const DescriptorConfig::ConfigParameter<bool> CLEAN_SESSION{
         "cleanSession",
         true,
         [](const std::unordered_map<std::string, std::string>& config)
-        { return Configurations::DescriptorConfig::tryGet(CLEAN_SESSION, config); }};
+        { return DescriptorConfig::tryGet(CLEAN_SESSION, config); }};
 
-    static inline const Configurations::DescriptorConfig::ConfigParameter<std::string> PERSISTENCE_DIR{
+    static inline const DescriptorConfig::ConfigParameter<std::string> PERSISTENCE_DIR{
         "persistenceDir",
         "",
         [](const std::unordered_map<std::string, std::string>& config)
-        { return Configurations::DescriptorConfig::tryGet(PERSISTENCE_DIR, config); }};
+        { return DescriptorConfig::tryGet(PERSISTENCE_DIR, config); }};
 
-    static inline const Configurations::DescriptorConfig::ConfigParameter<int32_t> MAX_INFLIGHT{
+    static inline const DescriptorConfig::ConfigParameter<int32_t> MAX_INFLIGHT{
         "maxInflight",
         0,
         [](const std::unordered_map<std::string, std::string>& config) -> std::optional<int32_t>
@@ -232,45 +232,45 @@ struct ConfigParametersMQTT
             return 0;
         }};
 
-    static inline const Configurations::DescriptorConfig::ConfigParameter<bool> USE_TLS{
+    static inline const DescriptorConfig::ConfigParameter<bool> USE_TLS{
         "useTls",
         false,
         [](const std::unordered_map<std::string, std::string>& config)
-        { return Configurations::DescriptorConfig::tryGet(USE_TLS, config); }};
+        { return DescriptorConfig::tryGet(USE_TLS, config); }};
 
-    static inline const Configurations::DescriptorConfig::ConfigParameter<std::string> TLS_CA_CERT{
+    static inline const DescriptorConfig::ConfigParameter<std::string> TLS_CA_CERT{
         "tlsCaCertPath",
         "",
         [](const std::unordered_map<std::string, std::string>& config)
-        { return Configurations::DescriptorConfig::tryGet(TLS_CA_CERT, config); }};
+        { return DescriptorConfig::tryGet(TLS_CA_CERT, config); }};
 
-    static inline const Configurations::DescriptorConfig::ConfigParameter<std::string> TLS_CLIENT_CERT{
+    static inline const DescriptorConfig::ConfigParameter<std::string> TLS_CLIENT_CERT{
         "tlsClientCertPath",
         "",
         [](const std::unordered_map<std::string, std::string>& config)
-        { return Configurations::DescriptorConfig::tryGet(TLS_CLIENT_CERT, config); }};
+        { return DescriptorConfig::tryGet(TLS_CLIENT_CERT, config); }};
 
-    static inline const Configurations::DescriptorConfig::ConfigParameter<std::string> TLS_CLIENT_KEY{
+    static inline const DescriptorConfig::ConfigParameter<std::string> TLS_CLIENT_KEY{
         "tlsClientKeyPath",
         "",
         [](const std::unordered_map<std::string, std::string>& config)
-        { return Configurations::DescriptorConfig::tryGet(TLS_CLIENT_KEY, config); }};
+        { return DescriptorConfig::tryGet(TLS_CLIENT_KEY, config); }};
 
-    static inline const Configurations::DescriptorConfig::ConfigParameter<bool> TLS_ALLOW_INSECURE{
+    static inline const DescriptorConfig::ConfigParameter<bool> TLS_ALLOW_INSECURE{
         "tlsAllowInsecure",
         false,
         [](const std::unordered_map<std::string, std::string>& config)
-        { return Configurations::DescriptorConfig::tryGet(TLS_ALLOW_INSECURE, config); }};
+        { return DescriptorConfig::tryGet(TLS_ALLOW_INSECURE, config); }};
 
-    static inline const Configurations::DescriptorConfig::ConfigParameter<Configurations::EnumWrapper, Configurations::InputFormat>
+    static inline const DescriptorConfig::ConfigParameter<EnumWrapper, InputFormat>
         INPUT_FORMAT{
             "inputFormat",
             std::nullopt,
             [](const std::unordered_map<std::string, std::string>& config)
-            { return Configurations::DescriptorConfig::tryGet(INPUT_FORMAT, config); }};
+            { return DescriptorConfig::tryGet(INPUT_FORMAT, config); }};
 
-    static inline std::unordered_map<std::string, Configurations::DescriptorConfig::ConfigParameterContainer> parameterMap
-        = Configurations::DescriptorConfig::createConfigParameterContainerMap(
+    static inline std::unordered_map<std::string, DescriptorConfig::ConfigParameterContainer> parameterMap
+        = DescriptorConfig::createConfigParameterContainerMap(
             SERVER_URI,
             CLIENT_ID,
             QOS,

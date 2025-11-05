@@ -13,29 +13,38 @@
 */
 
 #pragma once
+
 #include <Operators/Windows/Aggregations/WindowAggregationLogicalFunction.hpp>
 
 namespace NES
 {
 
-class ArrayAggregationLogicalFunction : public WindowAggregationLogicalFunction
+class TemporalSequenceAggregationLogicalFunctionV2 : public WindowAggregationLogicalFunction
 {
 public:
-    static std::shared_ptr<WindowAggregationLogicalFunction> create(const FieldAccessLogicalFunction& onField);
     static std::shared_ptr<WindowAggregationLogicalFunction>
-    create(const FieldAccessLogicalFunction& onField, const FieldAccessLogicalFunction& asField);
-    ArrayAggregationLogicalFunction(const FieldAccessLogicalFunction& onField, const FieldAccessLogicalFunction& asField);
-    explicit ArrayAggregationLogicalFunction(const FieldAccessLogicalFunction& onField);
+    create(const FieldAccessLogicalFunction& lonField, const FieldAccessLogicalFunction& latField, const FieldAccessLogicalFunction& timestampField);
+
+    TemporalSequenceAggregationLogicalFunctionV2(
+        const FieldAccessLogicalFunction& lonField,
+        const FieldAccessLogicalFunction& latField,
+        const FieldAccessLogicalFunction& timestampField,
+        const FieldAccessLogicalFunction& asField);
 
     void inferStamp(const Schema& schema) override;
-    ~ArrayAggregationLogicalFunction() override = default;
+    ~TemporalSequenceAggregationLogicalFunctionV2() override = default;
     [[nodiscard]] NES::SerializableAggregationFunction serialize() const override;
     [[nodiscard]] std::string_view getName() const noexcept override;
     [[nodiscard]] bool requiresSequentialAggregation() const { return true; }
 
 private:
-    static constexpr std::string_view NAME = "ARRAY_AGG";
+    static constexpr std::string_view NAME = "TemporalSequence";
     static constexpr DataType::Type partialAggregateStampType = DataType::Type::UNDEFINED;
     static constexpr DataType::Type finalAggregateStampType = DataType::Type::VARSIZED;
+
+    FieldAccessLogicalFunction lonField;
+    FieldAccessLogicalFunction latField;
+    FieldAccessLogicalFunction timestampField;
 };
 }
+

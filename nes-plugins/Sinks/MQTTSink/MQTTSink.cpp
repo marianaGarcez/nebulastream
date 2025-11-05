@@ -36,7 +36,7 @@
 #include <SinkRegistry.hpp>
 #include <SinkValidationRegistry.hpp>
 
-namespace NES::Sinks
+namespace NES
 {
 
 MQTTSink::Callback::Callback(std::string serverUri) : targetServerUri(std::move(serverUri))
@@ -89,11 +89,11 @@ MQTTSink::MQTTSink(const SinkDescriptor& sinkDescriptor)
 {
     switch (const auto inputFormat = sinkDescriptor.getFromConfig(ConfigParametersMQTT::INPUT_FORMAT))
     {
-        case Configurations::InputFormat::CSV:
-            formatter = std::make_unique<CSVFormat>(sinkDescriptor.schema);
+        case InputFormat::CSV:
+            formatter = std::make_unique<CSVFormat>(*sinkDescriptor.getSchema());
             break;
-        case Configurations::InputFormat::JSON:
-            formatter = std::make_unique<JSONFormat>(sinkDescriptor.schema);
+        case InputFormat::JSON:
+            formatter = std::make_unique<JSONFormat>(*sinkDescriptor.getSchema());
             break;
         default:
             throw UnknownSinkFormat(fmt::format("Sink format: {} not supported.", magic_enum::enum_name(inputFormat)));
@@ -199,7 +199,7 @@ void MQTTSink::stop(PipelineExecutionContext&)
     }
 }
 
-void MQTTSink::execute(const Memory::TupleBuffer& inputBuffer, PipelineExecutionContext&)
+void MQTTSink::execute(const TupleBuffer& inputBuffer, PipelineExecutionContext&)
 {
     if (inputBuffer.getNumberOfTuples() == 0)
     {
@@ -241,10 +241,10 @@ void MQTTSink::execute(const Memory::TupleBuffer& inputBuffer, PipelineExecution
     }
 }
 
-Configurations::DescriptorConfig::Config MQTTSink::validateAndFormat(std::unordered_map<std::string, std::string> config)
+DescriptorConfig::Config MQTTSink::validateAndFormat(std::unordered_map<std::string, std::string> config)
 {
     const bool cleanSessionProvided = config.contains(std::string(ConfigParametersMQTT::CLEAN_SESSION));
-    auto validated = Configurations::DescriptorConfig::validateAndFormat<ConfigParametersMQTT>(std::move(config), NAME);
+    auto validated = DescriptorConfig::validateAndFormat<ConfigParametersMQTT>(std::move(config), NAME);
 
     if (!cleanSessionProvided)
     {
@@ -262,12 +262,12 @@ Configurations::DescriptorConfig::Config MQTTSink::validateAndFormat(std::unorde
     return validated;
 }
 
-SinkValidationRegistryReturnType SinkValidationGeneratedRegistrar::RegisterMQTTSinkValidation(SinkValidationRegistryArguments sinkConfig)
+SinkValidationRegistryReturnType RegisterMQTTSinkValidation(SinkValidationRegistryArguments sinkConfig)
 {
     return MQTTSink::validateAndFormat(std::move(sinkConfig.config));
 }
 
-SinkRegistryReturnType SinkGeneratedRegistrar::RegisterMQTTSink(SinkRegistryArguments sinkRegistryArguments)
+SinkRegistryReturnType RegisterMQTTSink(SinkRegistryArguments sinkRegistryArguments)
 {
     return std::make_unique<MQTTSink>(sinkRegistryArguments.sinkDescriptor);
 }
