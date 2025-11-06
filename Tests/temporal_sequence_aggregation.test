@@ -3,7 +3,9 @@
 # groups: [Aggregation, SpatioTemporal, WindowOperators, TEMPORAL_SEQUENCE]
 
 # Test 1: Basic TEMPORAL_SEQUENCE with tumbling window
-Source vehicle_tracking UINT32 vehicle_id FLOAT64 lon FLOAT64 lat UINT64 ts FLOAT64 velocity INLINE
+CREATE LOGICAL SOURCE vehicle_tracking(vehicle_id UINT32, lon FLOAT64, lat FLOAT64, ts UINT64, velocity FLOAT64);
+CREATE PHYSICAL SOURCE FOR vehicle_tracking TYPE File;
+ATTACH INLINE
 1,-122.4194,37.7749,1700000000000,45.5
 1,-122.4180,37.7765,1700000060000,48.2
 1,-122.4165,37.7780,1700000120000,46.8
@@ -15,22 +17,24 @@ Source vehicle_tracking UINT32 vehicle_id FLOAT64 lon FLOAT64 lat UINT64 ts FLOA
 3,-122.4300,37.7800,1700000000000,55.0
 3,-122.4285,37.7815,1700000060000,52.3
 
-SINK trajectory_result UINT64 VEHICLE_TRACKING$START UINT64 VEHICLE_TRACKING$END UINT32 VEHICLE_TRACKING$vehicle_id VARSIZED TRAJECTORY
+CREATE SINK trajectory_result(vehicle_tracking.start UINT64, vehicle_tracking.end UINT64, vehicle_tracking.vehicle_id UINT32, vehicle_tracking.TRAJECTORY VARSIZED) TYPE File;
 
-SELECT vehicle_tracking$start, vehicle_tracking$end, vehicle_tracking$vehicle_id, TEMPORAL_SEQUENCE(vehicle_tracking$lon, vehicle_tracking$lat, vehicle_tracking$ts) AS TRAJECTORY
+SELECT start, end, vehicle_id, TEMPORAL_SEQUENCE(lon, lat, ts) AS TRAJECTORY
 FROM vehicle_tracking
-GROUP BY vehicle_tracking$vehicle_id
-WINDOW TUMBLING(vehicle_tracking$ts, size 180000 ms)
-INTO trajectory_result
+GROUP BY vehicle_id
+WINDOW TUMBLING(ts, size 180000 ms)
+INTO trajectory_result;
 ----
-1700000000000,1700000180000,1,BINARY(80)
-1700000000000,1700000180000,2,BINARY(80)
-1700000000000,1700000180000,3,BINARY(56)
-1700000180000,1700000360000,1,BINARY(32)
-1700000180000,1700000360000,2,BINARY(32)
+1699999920000,1700000100000,1,BINARY(67)
+1699999920000,1700000100000,2,BINARY(67)
+1699999920000,1700000100000,3,BINARY(67)
+1700000100000,1700000280000,1,BINARY(67)
+1700000100000,1700000280000,2,BINARY(67)
 
 # Test 2: TEMPORAL_SEQUENCE with sliding window
-Source sensor_data UINT16 sensor_id FLOAT32 x_coord FLOAT32 y_coord UINT64 time_ms INLINE
+CREATE LOGICAL SOURCE sensor_data(sensor_id UINT16, x_coord FLOAT32, y_coord FLOAT32, time_ms UINT64);
+CREATE PHYSICAL SOURCE FOR sensor_data TYPE File;
+ATTACH INLINE
 10,12.5,45.7,2000000000
 10,12.6,45.8,2000001000
 10,12.7,45.9,2000002000
@@ -40,21 +44,26 @@ Source sensor_data UINT16 sensor_id FLOAT32 x_coord FLOAT32 y_coord UINT64 time_
 20,13.2,46.2,2000002000
 10,12.9,46.1,2000004000
 
-SINK sliding_trajectories UINT64 SENSOR_DATA$START UINT64 SENSOR_DATA$END UINT16 SENSOR_DATA$sensor_id VARSIZED PATH
+CREATE SINK sliding_trajectories(sensor_data.start UINT64, sensor_data.end UINT64, sensor_data.sensor_id UINT16, sensor_data.PATH VARSIZED) TYPE File;
 
-SELECT sensor_data$start, sensor_data$end, sensor_data$sensor_id, TEMPORAL_SEQUENCE(sensor_data$x_coord, sensor_data$y_coord, sensor_data$time_ms) AS PATH
+SELECT start, end, sensor_id, TEMPORAL_SEQUENCE(x_coord, y_coord, time_ms) AS PATH
 FROM sensor_data
-GROUP BY sensor_data$sensor_id
-WINDOW SLIDING(sensor_data$time_ms, size 3000 ms, advance by 2000 ms)
-INTO sliding_trajectories
+GROUP BY sensor_id
+WINDOW SLIDING(time_ms, size 3000 ms, advance by 2000 ms)
+INTO sliding_trajectories;
 ----
-2000000000,2000003000,10,BINARY(80)
-2000000000,2000003000,20,BINARY(56)
-2000002000,2000005000,10,BINARY(56)
-2000002000,2000005000,20,BINARY(32)
+1999998000,2000001000,10,BINARY(38)
+1999998000,2000001000,20,BINARY(38)
+2000000000,2000003000,10,BINARY(96)
+2000000000,2000003000,20,BINARY(96)
+2000002000,2000005000,10,BINARY(96)
+2000002000,2000005000,20,BINARY(38)
+2000004000,2000007000,10,BINARY(38)
 
 # Test 3: TEMPORAL_SEQUENCE with filter conditions
-Source gps_stream UINT32 device_id FLOAT64 longitude FLOAT64 latitude UINT64 timestamp FLOAT32 speed VARSIZED category INLINE
+CREATE LOGICAL SOURCE gps_stream(device_id UINT32, longitude FLOAT64, latitude FLOAT64, timestamp UINT64, speed FLOAT32, category VARSIZED);
+CREATE PHYSICAL SOURCE FOR gps_stream TYPE File;
+ATTACH INLINE
 100,-73.9857,40.7484,3000000000,25.5,"car"
 100,-73.9847,40.7494,3000001000,30.2,"car"
 200,-74.0060,40.7128,3000000000,5.0,"bike"
@@ -63,20 +72,22 @@ Source gps_stream UINT32 device_id FLOAT64 longitude FLOAT64 latitude UINT64 tim
 300,-73.9900,40.7300,3000000000,45.0,"car"
 200,-74.0040,40.7148,3000002000,6.2,"bike"
 
-SINK filtered_trajectories UINT64 GPS_STREAM$START UINT64 GPS_STREAM$END UINT32 GPS_STREAM$device_id VARSIZED TRAJECTORY
+CREATE SINK filtered_trajectories(gps_stream.start UINT64, gps_stream.end UINT64, gps_stream.device_id UINT32, gps_stream.TRAJECTORY VARSIZED) TYPE File;
 
-SELECT gps_stream$start, gps_stream$end, gps_stream$device_id, TEMPORAL_SEQUENCE(gps_stream$longitude, gps_stream$latitude, gps_stream$timestamp) AS TRAJECTORY
+SELECT start, end, device_id, TEMPORAL_SEQUENCE(longitude, latitude, timestamp) AS TRAJECTORY
 FROM gps_stream
-WHERE gps_stream$speed > 10.0
-GROUP BY gps_stream$device_id
-WINDOW TUMBLING(gps_stream$timestamp, size 3000 ms)
-INTO filtered_trajectories
+WHERE speed > FLOAT64(10.0)
+GROUP BY device_id
+WINDOW TUMBLING(timestamp, size 3000 ms)
+INTO filtered_trajectories;
 ----
-3000000000,3000003000,100,BINARY(80)
-3000000000,3000003000,300,BINARY(32)
+3000000000,3000003000,100,BINARY(96)
+3000000000,3000003000,300,BINARY(38)
 
 # Test 4: TEMPORAL_SEQUENCE with multiple grouping keys
-Source fleet_tracking UINT32 fleet_id UINT32 vehicle_id FLOAT64 lng FLOAT64 lat UINT64 ts INLINE
+CREATE LOGICAL SOURCE fleet_tracking(fleet_id UINT32, vehicle_id UINT32, lng FLOAT64, lat FLOAT64, ts UINT64);
+CREATE PHYSICAL SOURCE FOR fleet_tracking TYPE File;
+ATTACH INLINE
 1,101,-0.1278,51.5074,4000000000
 1,101,-0.1268,51.5084,4000001000
 1,102,-0.1300,51.5100,4000000000
@@ -84,38 +95,43 @@ Source fleet_tracking UINT32 fleet_id UINT32 vehicle_id FLOAT64 lng FLOAT64 lat 
 1,101,-0.1258,51.5094,4000002000
 2,201,-0.1390,51.5210,4000001000
 
-SINK fleet_trajectories UINT64 FLEET_TRACKING$START UINT64 FLEET_TRACKING$END UINT32 FLEET_TRACKING$fleet_id UINT32 FLEET_TRACKING$vehicle_id VARSIZED ROUTE
+CREATE SINK fleet_trajectories(fleet_tracking.start UINT64, fleet_tracking.end UINT64, fleet_tracking.fleet_id UINT32, fleet_tracking.vehicle_id UINT32, fleet_tracking.ROUTE VARSIZED) TYPE File;
 
-SELECT fleet_tracking$start, fleet_tracking$end, fleet_tracking$fleet_id, fleet_tracking$vehicle_id, TEMPORAL_SEQUENCE(fleet_tracking$lng, fleet_tracking$lat, fleet_tracking$ts) AS ROUTE
+SELECT start, end, fleet_id, vehicle_id, TEMPORAL_SEQUENCE(lng, lat, ts) AS ROUTE
 FROM fleet_tracking
-GROUP BY fleet_tracking$fleet_id, fleet_tracking$vehicle_id
-WINDOW TUMBLING(fleet_tracking$ts, size 3000 ms)
-INTO fleet_trajectories
+GROUP BY fleet_id, vehicle_id
+WINDOW TUMBLING(ts, size 3000 ms)
+INTO fleet_trajectories;
 ----
-4000000000,4000003000,1,101,BINARY(80)
-4000000000,4000003000,1,102,BINARY(32)
-4000000000,4000003000,2,201,BINARY(56)
+3999999000,4000002000,1,101,BINARY(67)
+3999999000,4000002000,1,102,BINARY(38)
+3999999000,4000002000,2,201,BINARY(67)
+4000002000,4000005000,1,101,BINARY(38)
 
 # Test 5: TEMPORAL_SEQUENCE with empty windows (no data in some windows)
-Source sparse_tracking UINT32 id FLOAT64 x FLOAT64 y UINT64 t INLINE
+CREATE LOGICAL SOURCE sparse_tracking(id UINT32, x FLOAT64, y FLOAT64, t UINT64);
+CREATE PHYSICAL SOURCE FOR sparse_tracking TYPE File;
+ATTACH INLINE
 1,10.0,20.0,5000000000
 1,10.1,20.1,5000001000
 2,30.0,40.0,5000010000
 2,30.1,40.1,5000011000
 
-SINK sparse_result UINT64 SPARSE_TRACKING$START UINT64 SPARSE_TRACKING$END UINT32 SPARSE_TRACKING$id VARSIZED TRAJ
+CREATE SINK sparse_result(sparse_tracking.start UINT64, sparse_tracking.end UINT64, sparse_tracking.id UINT32, sparse_tracking.TRAJ VARSIZED) TYPE File;
 
-SELECT sparse_tracking$start, sparse_tracking$end, sparse_tracking$id, TEMPORAL_SEQUENCE(sparse_tracking$x, sparse_tracking$y, sparse_tracking$t) AS TRAJ
+SELECT start, end, id, TEMPORAL_SEQUENCE(x, y, t) AS TRAJ
 FROM sparse_tracking
-GROUP BY sparse_tracking$id
-WINDOW TUMBLING(sparse_tracking$t, size 5000 ms)
-INTO sparse_result
+GROUP BY id
+WINDOW TUMBLING(t, size 5000 ms)
+INTO sparse_result;
 ----
-5000000000,5000005000,1,BINARY(56)
-5000010000,5000015000,2,BINARY(56)
+5000000000,5000005000,1,BINARY(67)
+5000010000,5000015000,2,BINARY(67)
 
 # Test 6: Complex query with TEMPORAL_SEQUENCE and other aggregations
-Source vehicle_metrics UINT32 vehicle_id FLOAT64 lon FLOAT64 lat UINT64 timestamp FLOAT64 speed FLOAT64 fuel_level INLINE
+CREATE LOGICAL SOURCE vehicle_metrics(vehicle_id UINT32, lon FLOAT64, lat FLOAT64, timestamp UINT64, speed FLOAT64, fuel_level FLOAT64);
+CREATE PHYSICAL SOURCE FOR vehicle_metrics TYPE File;
+ATTACH INLINE
 1,-122.4194,37.7749,6000000000,45.5,0.75
 1,-122.4180,37.7765,6000001000,48.2,0.73
 1,-122.4165,37.7780,6000002000,46.8,0.71
@@ -123,16 +139,16 @@ Source vehicle_metrics UINT32 vehicle_id FLOAT64 lon FLOAT64 lat UINT64 timestam
 2,-122.4185,37.7760,6000001000,38.5,0.78
 2,-122.4170,37.7770,6000002000,36.2,0.76
 
-SINK vehicle_summary UINT64 VEHICLE_METRICS$START UINT64 VEHICLE_METRICS$END UINT32 VEHICLE_METRICS$vehicle_id VARSIZED TRAJECTORY FLOAT64 VEHICLE_METRICS$AVG_SPEED FLOAT64 VEHICLE_METRICS$MIN_FUEL
+CREATE SINK vehicle_summary(vehicle_metrics.start UINT64, vehicle_metrics.end UINT64, vehicle_metrics.vehicle_id UINT32, vehicle_metrics.TRAJECTORY VARSIZED, vehicle_metrics.AVG_SPEED FLOAT64, vehicle_metrics.MIN_FUEL FLOAT64) TYPE File;
 
-SELECT vehicle_metrics$start, vehicle_metrics$end, vehicle_metrics$vehicle_id, 
-       TEMPORAL_SEQUENCE(vehicle_metrics$lon, vehicle_metrics$lat, vehicle_metrics$timestamp) AS TRAJECTORY,
-       AVG(vehicle_metrics$speed) AS AVG_SPEED,
-       MIN(vehicle_metrics$fuel_level) AS MIN_FUEL
+SELECT start, end, vehicle_id,
+       TEMPORAL_SEQUENCE(lon, lat, timestamp) AS TRAJECTORY,
+       AVG(speed) AS AVG_SPEED,
+       MIN(fuel_level) AS MIN_FUEL
 FROM vehicle_metrics
-GROUP BY vehicle_metrics$vehicle_id
-WINDOW TUMBLING(vehicle_metrics$timestamp, size 3000 ms)
-INTO vehicle_summary
+GROUP BY vehicle_id
+WINDOW TUMBLING(timestamp, size 3000 ms)
+INTO vehicle_summary;
 ----
-6000000000,6000003000,1,BINARY(80),46.8333,0.71
-6000000000,6000003000,2,BINARY(80),36.5667,0.76
+6000000000,6000003000,1,BINARY(96),46.833333,0.71
+6000000000,6000003000,2,BINARY(96),36.566667,0.76
