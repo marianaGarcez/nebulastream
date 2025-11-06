@@ -26,6 +26,7 @@
 #include <Aggregation/AggregationProbePhysicalOperator.hpp>
 #include <Aggregation/Function/AggregationPhysicalFunction.hpp>
 #include <DataTypes/DataTypeProvider.hpp>
+#include <DataTypes/Schema.hpp>
 #include <Functions/FieldAccessPhysicalFunction.hpp>
 #include <Functions/FunctionProvider.hpp>
 #include <Functions/PhysicalFunction.hpp>
@@ -52,6 +53,9 @@
 #include <PhysicalOperator.hpp>
 #include <QueryExecutionConfiguration.hpp>
 #include <RewriteRuleRegistry.hpp>
+// Special-case lowering for TEMPORAL_SEQUENCE (multi-input) aggregation
+#include <Operators/Windows/Aggregations/Meos/TemporalSequenceAggregationLogicalFunctionV2.hpp>
+#include <Aggregation/Function/Meos/TemporalSequenceAggregationPhysicalFunction.hpp>
 
 namespace NES
 {
@@ -117,18 +121,53 @@ getAggregationPhysicalFunctions(const WindowedAggregationLogicalOperator& logica
         auto physicalInputType = DataTypeProvider::provideDataType(descriptor->getInputStamp().type);
         auto physicalFinalType = DataTypeProvider::provideDataType(descriptor->getFinalAggregateStamp().type);
 
-        auto aggregationInputFunction = QueryCompilation::FunctionProvider::lowerFunction(descriptor->onField);
         const auto resultFieldIdentifier = descriptor->asField.getFieldName();
         auto layout = std::make_shared<ColumnLayout>(configuration.pageSize.getValue(), logicalOperator.getInputSchemas()[0]);
-        auto bufferRef = std::make_shared<Interface::BufferRef::ColumnTupleBufferRef>(layout);
+        auto columnBufferRef = std::make_shared<Interface::BufferRef::ColumnTupleBufferRef>(layout);
 
-        auto name = descriptor->getName();
+        const auto name = descriptor->getName();
+
+        // Custom lowering path for TEMPORAL_SEQUENCE: needs three field functions (lon, lat, ts)
+        if (name == std::string_view("TemporalSequence"))
+        {
+            auto tsDescriptor = std::dynamic_pointer_cast<TemporalSequenceAggregationLogicalFunctionV2>(descriptor);
+            INVARIANT(tsDescriptor != nullptr, "Expected TemporalSequenceAggregationLogicalFunctionV2 for TemporalSequence");
+
+            // Lower the three input fields (lon, lat, timestamp)
+            auto lonPF = QueryCompilation::FunctionProvider::lowerFunction(tsDescriptor->getLonField());
+            auto latPF = QueryCompilation::FunctionProvider::lowerFunction(tsDescriptor->getLatField());
+            auto tsPF = QueryCompilation::FunctionProvider::lowerFunction(tsDescriptor->getTimestampField());
+
+            // Create a dedicated in-memory layout for the aggregation state (PagedVector) that
+            // matches the field identifiers used by the physical function ("lon", "lat", "timestamp").
+            // Using the input schema here is incorrect because it would not match the internal
+            // record written by the aggregation state, causing lookups by name to fail.
+            Schema stateSchema;
+            stateSchema.addField("lon", tsDescriptor->getLonField().getDataType());
+            stateSchema.addField("lat", tsDescriptor->getLatField().getDataType());
+            stateSchema.addField("timestamp", tsDescriptor->getTimestampField().getDataType());
+            auto tupleBufferRef = Interface::BufferRef::TupleBufferRef::create(configuration.pageSize.getValue(), stateSchema);
+
+            auto phys = std::make_shared<TemporalSequenceAggregationPhysicalFunction>(
+                std::move(physicalInputType),
+                std::move(physicalFinalType),
+                lonPF,
+                latPF,
+                tsPF,
+                resultFieldIdentifier,
+                tupleBufferRef);
+            aggregationPhysicalFunctions.push_back(std::move(phys));
+            continue;
+        }
+
+        // Default path: use registry for single-input aggregations
+        auto aggregationInputFunction = QueryCompilation::FunctionProvider::lowerFunction(descriptor->onField);
         auto aggregationArguments = AggregationPhysicalFunctionRegistryArguments(
             std::move(physicalInputType),
             std::move(physicalFinalType),
             std::move(aggregationInputFunction),
             resultFieldIdentifier,
-            bufferRef);
+            columnBufferRef);
         if (auto aggregationPhysicalFunction
             = AggregationPhysicalFunctionRegistry::instance().create(std::string(name), std::move(aggregationArguments)))
         {

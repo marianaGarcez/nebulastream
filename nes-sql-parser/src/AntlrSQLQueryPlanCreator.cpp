@@ -51,13 +51,24 @@
 #include <Functions/FieldAssignmentLogicalFunction.hpp>
 #include <Functions/LogicalFunction.hpp>
 #include <Functions/LogicalFunctionProvider.hpp>
+#include <Operators/Windows/Aggregations/ArrayAggregationLogicalFunction.hpp>
 #include <Operators/Windows/Aggregations/AvgAggregationLogicalFunction.hpp>
 #include <Operators/Windows/Aggregations/CountAggregationLogicalFunction.hpp>
 #include <Operators/Windows/Aggregations/MaxAggregationLogicalFunction.hpp>
 #include <Operators/Windows/Aggregations/MedianAggregationLogicalFunction.hpp>
+#include <Operators/Windows/Aggregations/Meos/VarAggregationLogicalFunction.hpp>
+#include <Operators/Windows/Aggregations/Meos/TemporalSequenceAggregationLogicalFunctionV2.hpp>
 #include <Operators/Windows/Aggregations/MinAggregationLogicalFunction.hpp>
+#include <Functions/Meos/TemporalEContainsGeometryLogicalFunction.hpp>
+#include <Functions/Meos/TemporalIntersectsFunction.hpp>
 #include <Operators/Windows/Aggregations/SumAggregationLogicalFunction.hpp>
 #include <Operators/Windows/JoinLogicalOperator.hpp>
+#include <Operators/Windows/Aggregations/Meos/VarAggregationLogicalFunction.hpp>
+#include <Operators/Windows/Aggregations/Meos/TemporalSequenceAggregationLogicalFunction.hpp>
+#include <Functions/Meos/TemporalIntersectsGeometryLogicalFunction.hpp>
+#include <Functions/Meos/TemporalAIntersectsGeometryLogicalFunction.hpp>
+#include <Functions/Meos/TemporalEDWithinGeometryLogicalFunction.hpp>
+#include <Functions/Meos/TemporalAtStBoxLogicalFunction.hpp>
 #include <Plans/LogicalPlan.hpp>
 #include <Plans/LogicalPlanBuilder.hpp>
 #include <Util/Overloaded.hpp>
@@ -881,6 +892,302 @@ void AntlrSQLQueryPlanCreator::exitFunctionCall(AntlrSQLParser::FunctionCallCont
             helpers.top().windowAggs.push_back(
                 std::make_shared<MedianAggregationLogicalFunction>(helpers.top().functionBuilder.back().get<FieldAccessLogicalFunction>()));
             break;
+                case AntlrSQLLexer::ARRAY_AGG:
+            helpers.top().windowAggs.push_back(
+                ArrayAggregationLogicalFunction::create(helpers.top().functionBuilder.back().get<FieldAccessLogicalFunction>()));
+            break;
+        case AntlrSQLLexer::VAR:
+            if (helpers.top().functionBuilder.empty())
+            {
+                throw InvalidQuerySyntax("Aggregation requires argument at {}", context->getText());
+            }
+            helpers.top().windowAggs.push_back(
+                VarAggregationLogicalFunction::create(helpers.top().functionBuilder.back().get<FieldAccessLogicalFunction>()));
+            break;
+        case AntlrSQLLexer::TEMPORAL_SEQUENCE:
+            if (helpers.top().functionBuilder.size() != 3) {
+                throw InvalidQuerySyntax("TEMPORAL_SEQUENCE requires exactly three arguments (longitude, latitude, timestamp), but got {}", helpers.top().functionBuilder.size());
+            }
+            {
+                const auto timestampFunction = helpers.top().functionBuilder.back();
+                helpers.top().functionBuilder.pop_back();
+                const auto latitudeFunction = helpers.top().functionBuilder.back();
+                helpers.top().functionBuilder.pop_back();
+                const auto longitudeFunction = helpers.top().functionBuilder.back();
+                helpers.top().functionBuilder.pop_back();
+                
+                // Verify all arguments are field access functions
+                if (!longitudeFunction.tryGet<FieldAccessLogicalFunction>() ||
+                    !latitudeFunction.tryGet<FieldAccessLogicalFunction>() ||
+                    !timestampFunction.tryGet<FieldAccessLogicalFunction>()) {
+                    throw InvalidQuerySyntax("TEMPORAL_SEQUENCE arguments must be field references");
+                }
+                
+                helpers.top().windowAggs.push_back(
+                    TemporalSequenceAggregationLogicalFunctionV2::create(longitudeFunction.get<FieldAccessLogicalFunction>(),
+                                                                        latitudeFunction.get<FieldAccessLogicalFunction>(),
+                                                                        timestampFunction.get<FieldAccessLogicalFunction>()));
+                // Push back one field access function to satisfy parser expectations
+                // This prevents the functionBuilder from being empty when processing the identifier
+                helpers.top().functionBuilder.push_back(longitudeFunction);
+            }
+            break;
+        case AntlrSQLLexer::TEMPORAL_EINTERSECTS_GEOMETRY:
+            {
+                // Convert constants from constantBuilder to ConstantValueLogicalFunction objects
+                while (!helpers.top().constantBuilder.empty()) {
+                    auto constantValue = std::move(helpers.top().constantBuilder.back());
+                    helpers.top().constantBuilder.pop_back();
+                    // Assume string constants are VARSIZED (WKT strings)
+                    auto dataType = DataTypeProvider::provideDataType(DataType::Type::VARSIZED);
+                    auto constFunction = ConstantValueLogicalFunction(dataType, std::move(constantValue));
+                    helpers.top().functionBuilder.push_back(constFunction);
+                }
+
+                const auto argCount = helpers.top().functionBuilder.size();
+                if (argCount != 4 && argCount != 6) {
+                    throw InvalidQuerySyntax("TEMPORAL_EINTERSECTS_GEOMETRY requires either 4 arguments (lon1, lat1, timestamp1, static_geometry) or 6 arguments (lon1, lat1, timestamp1, lon2, lat2, timestamp2), but got {}", argCount);
+                }
+
+                if (argCount == 4) {
+                    // 4-parameter case: temporal-static intersection (lon1, lat1, timestamp1, static_geometry)
+                    const auto staticGeometryFunction = helpers.top().functionBuilder.back();
+                    helpers.top().functionBuilder.pop_back();
+                    const auto timestamp1Function = helpers.top().functionBuilder.back();
+                    helpers.top().functionBuilder.pop_back();
+                    const auto lat1Function = helpers.top().functionBuilder.back();
+                    helpers.top().functionBuilder.pop_back();
+                    const auto lon1Function = helpers.top().functionBuilder.back();
+                    helpers.top().functionBuilder.pop_back();
+                    
+                    const auto function = TemporalIntersectsGeometryLogicalFunction(lon1Function, lat1Function, timestamp1Function, staticGeometryFunction);
+                    helpers.top().functionBuilder.push_back(function);
+                } else {
+                    // 6-parameter case: temporal-temporal intersection (lon1, lat1, timestamp1, lon2, lat2, timestamp2)
+                    const auto timestamp2Function = helpers.top().functionBuilder.back();
+                    helpers.top().functionBuilder.pop_back();
+                    const auto lat2Function = helpers.top().functionBuilder.back();
+                    helpers.top().functionBuilder.pop_back();
+                    const auto lon2Function = helpers.top().functionBuilder.back();
+                    helpers.top().functionBuilder.pop_back();
+                    const auto timestamp1Function = helpers.top().functionBuilder.back();
+                    helpers.top().functionBuilder.pop_back();
+                    const auto lat1Function = helpers.top().functionBuilder.back();
+                    helpers.top().functionBuilder.pop_back();
+                    const auto lon1Function = helpers.top().functionBuilder.back();
+                    helpers.top().functionBuilder.pop_back();
+                    
+                    const auto function = TemporalIntersectsGeometryLogicalFunction(lon1Function, lat1Function, timestamp1Function, lon2Function, lat2Function, timestamp2Function);
+                    helpers.top().functionBuilder.push_back(function);
+                }
+            }
+            break;
+        case AntlrSQLLexer::TEMPORAL_AINTERSECTS_GEOMETRY:
+            {
+                // Convert constants from constantBuilder to ConstantValueLogicalFunction objects
+                while (!helpers.top().constantBuilder.empty()) {
+                    auto constantValue = std::move(helpers.top().constantBuilder.back());
+                    helpers.top().constantBuilder.pop_back();
+                    // Assume string constants are VARSIZED (WKT strings)
+                    auto dataType = DataTypeProvider::provideDataType(DataType::Type::VARSIZED);
+                    auto constFunction = ConstantValueLogicalFunction(dataType, std::move(constantValue));
+                    helpers.top().functionBuilder.push_back(constFunction);
+                }
+                const auto argCount = helpers.top().functionBuilder.size();
+                if (argCount != 4 && argCount != 6) {
+                    throw InvalidQuerySyntax("TEMPORAL_AINTERSECTS_GEOMETRY requires either 4 arguments (lon1, lat1, timestamp1, static_geometry) or 6 arguments (lon1, lat1, timestamp1, lon2, lat2, timestamp2), but got {}", argCount);
+                }
+                if (argCount == 4) {
+                    // 4-parameter case: temporal-static intersection (lon1, lat1, timestamp1, static_geometry)
+                    const auto staticGeometryFunction = helpers.top().functionBuilder.back();
+                    helpers.top().functionBuilder.pop_back();
+                    const auto timestamp1Function = helpers.top().functionBuilder.back();
+                    helpers.top().functionBuilder.pop_back();
+                    const auto lat1Function = helpers.top().functionBuilder.back();
+                    helpers.top().functionBuilder.pop_back();
+                    const auto lon1Function = helpers.top().functionBuilder.back();
+                    helpers.top().functionBuilder.pop_back();
+                    
+                    const auto function = TemporalAIntersectsGeometryLogicalFunction(lon1Function, lat1Function, timestamp1Function, staticGeometryFunction);
+                    helpers.top().functionBuilder.push_back(function);
+                } else {
+                    // 6-parameter case: temporal-temporal intersection (lon1, lat1, timestamp1, lon2, lat2, timestamp2)
+                    const auto timestamp2Function = helpers.top().functionBuilder.back();
+                    helpers.top().functionBuilder.pop_back();
+                    const auto lat2Function = helpers.top().functionBuilder.back();
+                    helpers.top().functionBuilder.pop_back();
+                    const auto lon2Function = helpers.top().functionBuilder.back();
+                    helpers.top().functionBuilder.pop_back();
+                    const auto timestamp1Function = helpers.top().functionBuilder.back();
+                    helpers.top().functionBuilder.pop_back();
+                    const auto lat1Function = helpers.top().functionBuilder.back();
+                    helpers.top().functionBuilder.pop_back();
+                    const auto lon1Function = helpers.top().functionBuilder.back();
+                    helpers.top().functionBuilder.pop_back();
+                    
+                    const auto function = TemporalAIntersectsGeometryLogicalFunction(lon1Function, lat1Function, timestamp1Function, lon2Function, lat2Function, timestamp2Function);
+                    helpers.top().functionBuilder.push_back(function);
+                }
+            }
+            break;
+        case AntlrSQLLexer::TEMPORAL_ECONTAINS_GEOMETRY: 
+        {
+            // move any literal WKT that’s still on constantBuilder into functionBuilder
+            while(!helpers.top().constantBuilder.empty()){
+                auto v = std::move(helpers.top().constantBuilder.back());
+                helpers.top().constantBuilder.pop_back();
+                helpers.top().functionBuilder.emplace_back(
+                    ConstantValueLogicalFunction(
+                        DataTypeProvider::provideDataType(DataType::Type::VARSIZED), std::move(v)));
+            }
+
+            const auto n = helpers.top().functionBuilder.size();
+            if(n==6){
+                auto ts2 = helpers.top().functionBuilder.back();
+                helpers.top().functionBuilder.pop_back();
+                auto lat2= helpers.top().functionBuilder.back();
+                helpers.top().functionBuilder.pop_back();
+                auto lon2= helpers.top().functionBuilder.back();
+                helpers.top().functionBuilder.pop_back();
+                auto ts1 = helpers.top().functionBuilder.back();
+                helpers.top().functionBuilder.pop_back();
+                auto lat1= helpers.top().functionBuilder.back();
+                helpers.top().functionBuilder.pop_back();
+                auto lon1= helpers.top().functionBuilder.back();
+                helpers.top().functionBuilder.pop_back();
+                helpers.top().functionBuilder.emplace_back(
+                    TemporalEContainsGeometryLogicalFunction(lon1,lat1,ts1,lon2,lat2,ts2));
+            } else if(n==4){
+                /* decide order by data-type of first arg */
+                auto last = helpers.top().functionBuilder.back();
+                helpers.top().functionBuilder.pop_back();
+                auto third= helpers.top().functionBuilder.back();
+                helpers.top().functionBuilder.pop_back();
+                auto second= helpers.top().functionBuilder.back();
+                helpers.top().functionBuilder.pop_back();
+                auto first = helpers.top().functionBuilder.back();
+                helpers.top().functionBuilder.pop_back();
+
+                if(first.getDataType().isType(DataType::Type::VARSIZED)) // static,tgeo
+                    helpers.top().functionBuilder.emplace_back(
+                        TemporalEContainsGeometryLogicalFunction(first,second,third,last));
+                else                                                      // tgeo,static
+                    helpers.top().functionBuilder.emplace_back(
+                        TemporalEContainsGeometryLogicalFunction(first,second,third,last));
+            } else {
+                throw InvalidQuerySyntax("TEMPORAL_ECONTAINS_GEOMETRY expects 4 or 6 arguments");
+            }
+        }
+        break;
+        case AntlrSQLLexer::EDWITHIN_TGEO_GEO:
+        {
+            const auto argCount = context->expression().size();
+            if (argCount != 5)
+            {
+                throw InvalidQuerySyntax("EDWITHIN_TGEO_GEO requires exactly five arguments (lon, lat, timestamp, geometry, distance), but got {}", argCount);
+            }
+
+            // Move pending constants into the function builder (WKT last)
+            while (!helpers.top().constantBuilder.empty())
+            {
+                auto constantValue = std::move(helpers.top().constantBuilder.back());
+                helpers.top().constantBuilder.pop_back();
+
+                DataType dataType;
+                const auto upperValue = Util::toUpperCase(constantValue);
+                if (upperValue == "TRUE" || upperValue == "FALSE")
+                {
+                    dataType = DataTypeProvider::provideDataType(DataType::Type::BOOLEAN);
+                }
+                else
+                {
+                    char* endPtr = nullptr;
+                    std::strtod(constantValue.c_str(), &endPtr);
+                    if (endPtr != nullptr && *endPtr == '\0')
+                    {
+                        dataType = DataTypeProvider::provideDataType(DataType::Type::FLOAT64);
+                    }
+                    else
+                    {
+                        dataType = DataTypeProvider::provideDataType(DataType::Type::VARSIZED);
+                    }
+                }
+                helpers.top().functionBuilder.emplace_back(ConstantValueLogicalFunction(dataType, std::move(constantValue)));
+            }
+
+            const auto total = helpers.top().functionBuilder.size();
+            PRECONDITION(total >= 5, "EDWITHIN_TGEO_GEO requires (lon, lat, timestamp, geometry, distance), but got {}", total);
+
+            // Order after move: [lon, lat, ts, distance, geometry]
+            auto geometryFunction = helpers.top().functionBuilder.back(); helpers.top().functionBuilder.pop_back();
+            auto distanceFunction = helpers.top().functionBuilder.back(); helpers.top().functionBuilder.pop_back();
+            auto timestampFunction = helpers.top().functionBuilder.back(); helpers.top().functionBuilder.pop_back();
+            auto latFunction = helpers.top().functionBuilder.back(); helpers.top().functionBuilder.pop_back();
+            auto lonFunction = helpers.top().functionBuilder.back(); helpers.top().functionBuilder.pop_back();
+
+            helpers.top().functionBuilder.emplace_back(
+                TemporalEDWithinGeometryLogicalFunction(lonFunction, latFunction, timestampFunction, geometryFunction, distanceFunction));
+        }
+        break;
+        case AntlrSQLLexer::TGEO_AT_STBOX:
+        {
+            const auto argCount = context->expression().size();
+            if (argCount != 4 && argCount != 5)
+            {
+                throw InvalidQuerySyntax("TGEO_AT_STBOX requires four arguments (lon, lat, timestamp, stbox) with an optional fifth border_inc flag, but got {}", argCount);
+            }
+
+            // Move pending constants into the function builder (border first if present, STBOX last)
+            while (!helpers.top().constantBuilder.empty())
+            {
+                auto constantValue = std::move(helpers.top().constantBuilder.back());
+                helpers.top().constantBuilder.pop_back();
+
+                DataType dataType;
+                const auto upperValue = Util::toUpperCase(constantValue);
+                if (upperValue == "TRUE" || upperValue == "FALSE")
+                {
+                    dataType = DataTypeProvider::provideDataType(DataType::Type::BOOLEAN);
+                }
+                else
+                {
+                    char* endPtr = nullptr;
+                    std::strtod(constantValue.c_str(), &endPtr);
+                    if (endPtr != nullptr && *endPtr == '\0')
+                    {
+                        dataType = DataTypeProvider::provideDataType(DataType::Type::FLOAT64);
+                    }
+                    else
+                    {
+                        dataType = DataTypeProvider::provideDataType(DataType::Type::VARSIZED);
+                    }
+                }
+                helpers.top().functionBuilder.emplace_back(ConstantValueLogicalFunction(dataType, std::move(constantValue)));
+            }
+
+            const auto total = helpers.top().functionBuilder.size();
+            PRECONDITION(total >= 4, "TGEO_AT_STBOX requires (lon, lat, timestamp, stbox) with optional border flag, but got {}", total);
+
+            auto stboxFunction = helpers.top().functionBuilder.back();
+            helpers.top().functionBuilder.pop_back();
+
+            LogicalFunction borderFlag = ConstantValueLogicalFunction(
+                DataTypeProvider::provideDataType(DataType::Type::BOOLEAN), "TRUE");
+            if (!helpers.top().functionBuilder.empty() && helpers.top().functionBuilder.back().getDataType().isType(DataType::Type::BOOLEAN))
+            {
+                borderFlag = helpers.top().functionBuilder.back();
+                helpers.top().functionBuilder.pop_back();
+            }
+
+            auto timestampFunction = helpers.top().functionBuilder.back(); helpers.top().functionBuilder.pop_back();
+            auto latFunction = helpers.top().functionBuilder.back(); helpers.top().functionBuilder.pop_back();
+            auto lonFunction = helpers.top().functionBuilder.back(); helpers.top().functionBuilder.pop_back();
+
+            helpers.top().functionBuilder.emplace_back(
+                TemporalAtStBoxLogicalFunction(lonFunction, latFunction, timestampFunction, stboxFunction, borderFlag));
+        }
+        break;
+
         default:
             /// Check if the function is a constructor for a datatype
             if (const auto dataType = DataTypeProvider::tryProvideDataType(funcName); dataType.has_value())
@@ -895,11 +1202,47 @@ void AntlrSQLQueryPlanCreator::exitFunctionCall(AntlrSQLParser::FunctionCallCont
                 auto constFunctionItem = ConstantValueLogicalFunction(*dataType, std::move(value));
                 helpers.top().functionBuilder.emplace_back(constFunctionItem);
             }
+            else if (funcName == "VAR")
+            {
+                if (helpers.top().functionBuilder.empty())
+                {
+                    throw InvalidQuerySyntax("Aggregation requires argument at {}", context->getText());
+                }
+                const auto& lastArg = helpers.top().functionBuilder.back().get<FieldAccessLogicalFunction>();
+                helpers.top().windowAggs.push_back(std::make_shared<VarAggregationLogicalFunction>(lastArg));
+            }
+            else if (funcName == "TEMPORAL_SEQUENCE")
+            {
+                if (helpers.top().functionBuilder.size() < 3)
+                {
+                    throw InvalidQuerySyntax("TEMPORAL_SEQUENCE requires three arguments at {}", context->getText());
+                }
+                const auto ts = helpers.top().functionBuilder.back().get<FieldAccessLogicalFunction>();
+                helpers.top().functionBuilder.pop_back();
+                const auto lat = helpers.top().functionBuilder.back().get<FieldAccessLogicalFunction>();
+                helpers.top().functionBuilder.pop_back();
+                const auto lon = helpers.top().functionBuilder.back().get<FieldAccessLogicalFunction>();
+                helpers.top().functionBuilder.pop_back();
+                helpers.top().windowAggs.push_back(TemporalSequenceAggregationLogicalFunctionV2::create(lon, lat, ts));
+            }
             else if (auto logicalFunction = LogicalFunctionProvider::tryProvide(funcName, helpers.top().functionBuilder))
             {
                 /// Remove exactly the functions used to create the 'logicalFunction' from the back of the function builder
                 helpers.top().functionBuilder.resize(helpers.top().functionBuilder.size() - logicalFunction.value().getChildren().size());
                 helpers.top().functionBuilder.push_back(*logicalFunction);
+            }
+            else if (funcName == "TEMPORAL_INTERSECTS")
+            {
+                if (helpers.top().functionBuilder.size() != 3) {
+                    throw InvalidQuerySyntax("TEMPORAL_INTERSECTS requires exactly three arguments (lon, lat, timestamp), but got {}", helpers.top().functionBuilder.size());
+                }
+                const auto ts = helpers.top().functionBuilder.back();
+                helpers.top().functionBuilder.pop_back();
+                const auto lat = helpers.top().functionBuilder.back();
+                helpers.top().functionBuilder.pop_back();
+                const auto lon = helpers.top().functionBuilder.back();
+                helpers.top().functionBuilder.pop_back();
+                helpers.top().functionBuilder.emplace_back(TemporalIntersectsFunction(lon, lat, ts));
             }
             else
             {

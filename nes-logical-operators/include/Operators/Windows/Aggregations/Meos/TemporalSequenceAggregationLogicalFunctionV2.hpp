@@ -37,6 +37,11 @@ public:
     [[nodiscard]] std::string_view getName() const noexcept override;
     [[nodiscard]] bool requiresSequentialAggregation() const { return true; }
 
+    // Accessors for lowering to physical implementation
+    [[nodiscard]] const FieldAccessLogicalFunction& getLonField() const noexcept { return lonField; }
+    [[nodiscard]] const FieldAccessLogicalFunction& getLatField() const noexcept { return latField; }
+    [[nodiscard]] const FieldAccessLogicalFunction& getTimestampField() const noexcept { return timestampField; }
+
 private:
     static constexpr std::string_view NAME = "TemporalSequence";
     static constexpr DataType::Type partialAggregateStampType = DataType::Type::UNDEFINED;
@@ -47,4 +52,3 @@ private:
     FieldAccessLogicalFunction timestampField;
 };
 }
-
