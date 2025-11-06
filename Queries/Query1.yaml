@@ -19,7 +19,7 @@ sinks:
       - { name: SNCB_STREAM$END,   type: UINT64 }
       - { name: SNCB_STREAM$CNT,   type: UINT64 }
     config:
-      serverURI: "tcp://192.168.234.190:1883"
+      serverURI: "tcp://host.docker.internal:1884"
       clientId: "brake_alerts_${START_TIME_EPOCH}"
       topic: "train/brake/alerts"
       qos: "0"
