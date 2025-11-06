@@ -9,18 +9,20 @@ query: |
                           'SRID=4326;POINT(4.3658 50.6456)',
                           FLOAT64(2.0)) = INT32(1)
   WINDOW TUMBLING(time_utc, SIZE 5 SEC)
-  INTO file_sink;
+  INTO BRAKE_ALERTS_STREAM;
 
 sinks:
-  - name: FILE_SINK
-    type: File
+  - name: BRAKE_ALERTS_STREAM
+    type: MQTT
     schema:
       - { name: SNCB_STREAM$START, type: UINT64 }
       - { name: SNCB_STREAM$END,   type: UINT64 }
       - { name: SNCB_STREAM$CNT,   type: UINT64 }
     config:
-      file_path: "/workspace/Output/output_query1.csv"
-      input_format: CSV
+      serverURI: "tcp://192.168.234.190:1883"
+      clientId: "brake_alerts_${START_TIME_EPOCH}"
+      topic: "train/brake/alerts"
+      qos: "0"
 
 logical:
   - name: SNCB_STREAM

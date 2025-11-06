@@ -72,22 +72,23 @@ void MQTTSink::Callback::delivery_complete(mqtt::delivery_token_ptr token)
 
 MQTTSink::MQTTSink(const SinkDescriptor& sinkDescriptor)
     : Sink()
-    , serverUri(sinkDescriptor.getFromConfig(ConfigParametersMQTT::SERVER_URI))
-    , clientId(sinkDescriptor.getFromConfig(ConfigParametersMQTT::CLIENT_ID))
-    , topic(sinkDescriptor.getFromConfig(ConfigParametersMQTT::TOPIC))
-    , username(sinkDescriptor.tryGetFromConfig(ConfigParametersMQTT::USERNAME))
-    , password(sinkDescriptor.tryGetFromConfig(ConfigParametersMQTT::PASSWORD))
-    , qos(sinkDescriptor.getFromConfig(ConfigParametersMQTT::QOS))
-    , cleanSession(sinkDescriptor.getFromConfig(ConfigParametersMQTT::CLEAN_SESSION))
-    , persistenceDir(sinkDescriptor.tryGetFromConfig(ConfigParametersMQTT::PERSISTENCE_DIR))
-    , maxInflight(sinkDescriptor.tryGetFromConfig(ConfigParametersMQTT::MAX_INFLIGHT))
-    , useTls(sinkDescriptor.getFromConfig(ConfigParametersMQTT::USE_TLS))
-    , tlsCaCertPath(sinkDescriptor.tryGetFromConfig(ConfigParametersMQTT::TLS_CA_CERT))
-    , tlsClientCertPath(sinkDescriptor.tryGetFromConfig(ConfigParametersMQTT::TLS_CLIENT_CERT))
-    , tlsClientKeyPath(sinkDescriptor.tryGetFromConfig(ConfigParametersMQTT::TLS_CLIENT_KEY))
-    , tlsAllowInsecure(sinkDescriptor.getFromConfig(ConfigParametersMQTT::TLS_ALLOW_INSECURE))
+    , serverUri(sinkDescriptor.getFromConfig(MQTTSinkConfig::SERVER_URI))
+    , clientId(sinkDescriptor.getFromConfig(MQTTSinkConfig::CLIENT_ID))
+    , topic(sinkDescriptor.getFromConfig(MQTTSinkConfig::TOPIC))
+    , username(sinkDescriptor.tryGetFromConfig(MQTTSinkConfig::USERNAME))
+    , password(sinkDescriptor.tryGetFromConfig(MQTTSinkConfig::PASSWORD))
+    , qos(sinkDescriptor.getFromConfig(MQTTSinkConfig::QOS))
+    , cleanSession(sinkDescriptor.getFromConfig(MQTTSinkConfig::CLEAN_SESSION))
+    , persistenceDir(sinkDescriptor.tryGetFromConfig(MQTTSinkConfig::PERSISTENCE_DIR))
+    , maxInflight(sinkDescriptor.tryGetFromConfig(MQTTSinkConfig::MAX_INFLIGHT))
+    , useTls(sinkDescriptor.getFromConfig(MQTTSinkConfig::USE_TLS))
+    , tlsCaCertPath(sinkDescriptor.tryGetFromConfig(MQTTSinkConfig::TLS_CA_CERT))
+    , tlsClientCertPath(sinkDescriptor.tryGetFromConfig(MQTTSinkConfig::TLS_CLIENT_CERT))
+    , tlsClientKeyPath(sinkDescriptor.tryGetFromConfig(MQTTSinkConfig::TLS_CLIENT_KEY))
+    , tlsAllowInsecure(sinkDescriptor.getFromConfig(MQTTSinkConfig::TLS_ALLOW_INSECURE))
 {
-    switch (const auto inputFormat = sinkDescriptor.getFromConfig(ConfigParametersMQTT::INPUT_FORMAT))
+    // Resolve input format (default provided by validator is CSV)
+    switch (const auto inputFormat = sinkDescriptor.getFromConfig(MQTTSinkConfig::INPUT_FORMAT))
     {
         case InputFormat::CSV:
             formatter = std::make_unique<CSVFormat>(*sinkDescriptor.getSchema());
@@ -243,18 +244,18 @@ void MQTTSink::execute(const TupleBuffer& inputBuffer, PipelineExecutionContext&
 
 DescriptorConfig::Config MQTTSink::validateAndFormat(std::unordered_map<std::string, std::string> config)
 {
-    const bool cleanSessionProvided = config.contains(std::string(ConfigParametersMQTT::CLEAN_SESSION));
-    auto validated = DescriptorConfig::validateAndFormat<ConfigParametersMQTT>(std::move(config), NAME);
+    const bool cleanSessionProvided = config.contains(std::string(MQTTSinkConfig::CLEAN_SESSION));
+    auto validated = DescriptorConfig::validateAndFormat<MQTTSinkConfig>(std::move(config), NAME);
 
     if (!cleanSessionProvided)
     {
-        const auto qosIt = validated.find(std::string(ConfigParametersMQTT::QOS));
+        const auto qosIt = validated.find(std::string(MQTTSinkConfig::QOS));
         if (qosIt != validated.end())
         {
             const auto qosValue = std::get<int32_t>(qosIt->second);
             if (qosValue == 2)
             {
-                validated[std::string(ConfigParametersMQTT::CLEAN_SESSION)] = false;
+                validated[std::string(MQTTSinkConfig::CLEAN_SESSION)] = false;
             }
         }
     }

@@ -138,7 +138,9 @@ inline std::string generateUUID()
 }
 }
 
-struct ConfigParametersMQTT
+// Note: Avoid name clash with MQTT Source config (which also used ConfigParametersMQTT).
+// Using a distinct name ensures the correct validator is instantiated and used.
+struct MQTTSinkConfig
 {
     static inline const DescriptorConfig::ConfigParameter<std::string> SERVER_URI{
         "serverURI",
@@ -165,29 +167,20 @@ struct ConfigParametersMQTT
 
     static inline const DescriptorConfig::ConfigParameter<std::string> USERNAME{
         "username",
-        std::nullopt,
-        [](const std::unordered_map<std::string, std::string>& config) -> std::optional<std::string> {
-            if (auto it = config.find("username"); it != config.end() && !it->second.empty()) {
-                return it->second;
-            }
-            return std::nullopt;
-        }};
+        std::string{},
+        [](const std::unordered_map<std::string, std::string>& config)
+        { return DescriptorConfig::tryGet(USERNAME, config); }};
 
     static inline const DescriptorConfig::ConfigParameter<std::string> PASSWORD{
         "password",
-        std::nullopt,
-        [](const std::unordered_map<std::string, std::string>& config) -> std::optional<std::string> {
-            if (auto it = config.find("password"); it != config.end()) {
-                // Allow empty passwords for Belgian Railway (NULL password with username)
-                return it->second;
-            }
-            return std::nullopt;
-        }};
+        std::string{},
+        [](const std::unordered_map<std::string, std::string>& config)
+        { return DescriptorConfig::tryGet(PASSWORD, config); }};
 
     static inline const DescriptorConfig::ConfigParameter<int32_t> QOS{
         "qos",
         1,
-        [](const std::unordered_map<std::string, std::string>& config) -> std::optional<uint8_t>
+        [](const std::unordered_map<std::string, std::string>& config) -> std::optional<int32_t>
         {
             // Check if qos is present in config, if not use default value
             if (auto it = config.find("qos"); it != config.end()) {
@@ -265,7 +258,7 @@ struct ConfigParametersMQTT
     static inline const DescriptorConfig::ConfigParameter<EnumWrapper, InputFormat>
         INPUT_FORMAT{
             "inputFormat",
-            std::nullopt,
+            EnumWrapper(InputFormat::CSV),
             [](const std::unordered_map<std::string, std::string>& config)
             { return DescriptorConfig::tryGet(INPUT_FORMAT, config); }};
 
