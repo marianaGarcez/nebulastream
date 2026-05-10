@@ -63,3 +63,7 @@ add_registry_entry(LogicalFunction OctetLength KEY OCTET_LENGTH)
 add_registry_entry(LogicalFunction ToBase64 KEY TO_BASE64)
 add_registry_entry(LogicalFunction UnboundFieldAccess)
 add_registry_entry(LogicalFunction VarSizedToNumeric)
+
+add_source_files(nes-logical-operators ConstructStructLogicalFunction.cpp)
+add_registry_entry(LogicalFunction ConstructStruct)
+add_unreflection_entry(LogicalFunction ConstructStruct)

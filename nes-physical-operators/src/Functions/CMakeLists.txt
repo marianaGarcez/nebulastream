@@ -19,6 +19,9 @@ add_source_files(nes-physical-operators
         )
 
 
+add_source_files(nes-physical-operators ConstructStructPhysicalFunction.cpp)
+add_registry_entry(PhysicalFunction ConstructStruct)
+
 add_subdirectory(ArithmeticalFunctions)
 add_subdirectory(ComparisonFunctions)
 add_subdirectory(BooleanFunctions)
