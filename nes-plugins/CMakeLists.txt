@@ -30,6 +30,7 @@ add_plugin("Functions/Conditional")
 add_plugin("InputFormatters/NestedJSONInputFormatter")
 add_plugin("DataTypes/Image")
 add_plugin("DataTypes/Reading")
+add_plugin("DataTypes/GeoSpatial")
 
 if (NES_ENABLES_TESTS)
   # ChecksumSink depends on Checksum.cpp from systest which is only added when tests are enabled.
