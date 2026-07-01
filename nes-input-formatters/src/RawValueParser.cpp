@@ -164,6 +164,12 @@ void parseRawValueIntoRecord(
             }
             std::unreachable();
         }
+        case DataType::Type::FIXEDSIZED:
+            throw NotImplemented("Flat textual formatters do not support FIXEDSIZED arrays.");
+        case DataType::Type::STRUCT:
+            throw NotImplemented("Flat textual formatters do not support STRUCT types.");
+        case DataType::Type::VARARRAY:
+            throw NotImplemented("Flat textual formatters do not support VARARRAY types.");
         case DataType::Type::UNDEFINED:
             throw NotImplemented("Cannot parse undefined type.");
     }

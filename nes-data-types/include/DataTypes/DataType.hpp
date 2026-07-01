@@ -49,6 +49,7 @@ struct DataType final
         VARSIZED,
         FIXEDSIZED,
         STRUCT,
+        VARARRAY
     };
 
     enum class NULLABLE : uint8_t
@@ -58,6 +59,8 @@ struct DataType final
     };
 
     DataType(Type type, NULLABLE nullable);
+    /// Constructor for vararrays -> no fixed size but an element type
+    DataType(Type type, NULLABLE nullable, Type elementType);
     /// FIXEDSIZED-only constructor: also carries element type and count.
     /// Todo: remove in a proper frontend datatype refactoring
     DataType(Type type, NULLABLE nullable, Type elementType, uint32_t count);
