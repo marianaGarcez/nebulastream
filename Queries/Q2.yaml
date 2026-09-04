@@ -1,17 +1,20 @@
 # Q2 - Location-Based Noise Monitoring
 # Reference: nebulastream-private MeosSNCBQuery2.cpp
-#   .filter(tpointatstbox(...) == 1 && speed > 0 && PCFA_mbar > 0
-#           && speed*0.5 + PCFA_mbar*0.5 > 2)
-#   .window(TumblingWindow) .apply(Max(PCFA_mbar))
+#   Original: .filter(tpointatstbox(...) == 1 && speed > 0 && PCFA_mbar > 0
+#             && speed*0.5 + PCFA_mbar*0.5 > 2) .window(TumblingWindow) .apply(Max(PCFA_mbar))
+#
+#   Repurposed: the frontend's SoundQuery used to fabricate a "noise level" in JS
+#   (speed*2, capped at 100, plus a client-side per-device speed-variation term).
+#   This computes that formula's base term server-side instead, per-point rather
+#   than windowed, so the frontend can overlay a real value on every path point.
+#   The 100 cap and the variation term (which needs a per-device running average -
+#   more join complexity than this demo query warrants) stay client-side as display-only.
+#   NES has no LEAST/CASE support to express the cap here.
 # Deploy: nebucli -t Queries/Q2.yaml start
 
 query: |
-  SELECT start, end, MAX(pcfa_mbar) AS max_pcfa
+  SELECT ts, deviceid, gps_lat, gps_lon, gsp_speed * FLOAT64(2.0) AS noise_level
   FROM sncb_stream
-  WHERE tgeo_at_stbox(MovingPoint(gps_lon, gps_lat, ts), SpatioTemporalBox(FLOAT64(3.0), FLOAT64(4.0), FLOAT64(50.8), FLOAT64(51.4), UINT64(1722657600), UINT64(1722664800)))
-    AND gsp_speed > FLOAT64(0.0) AND pcfa_mbar > FLOAT64(0.0)
-    AND gsp_speed * FLOAT64(0.5) + pcfa_mbar * FLOAT64(0.5) > FLOAT64(2.0)
-  WINDOW TUMBLING(ts, SIZE 600 ms)
   INTO Q2_SINK
 
 sinks:
@@ -19,11 +22,15 @@ sinks:
     host: localhost:8080
     type: File
     schema:
-      - name: SNCB_STREAM$START
+      - name: SNCB_STREAM$TS
         type: UINT64
-      - name: SNCB_STREAM$END
+      - name: SNCB_STREAM$DEVICEID
         type: UINT64
-      - name: SNCB_STREAM$MAX_PCFA
+      - name: SNCB_STREAM$GPS_LAT
+        type: FLOAT64
+      - name: SNCB_STREAM$GPS_LON
+        type: FLOAT64
+      - name: NOISE_LEVEL
         type: FLOAT64
     config:
       file_path: "Output/q2_noise_monitoring.json"
