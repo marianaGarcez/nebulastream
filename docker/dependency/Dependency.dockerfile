@@ -24,6 +24,11 @@ ARG ARCH
 ARG SANITIZER="none"
 # Public URL for read-only S3-compatible cache (no credentials needed)
 ARG VCPKG_CACHE_PUBLIC_URL=""
+# Pin the vcpkg tooling to the same commit as the builtin-baseline in vcpkg/vcpkg.json.
+# Cloning master instead pulls scripts that require CMake >= 4 (string(JSON ... STRING_ENCODE)),
+# while the base image pins CMake 3.31, and it also invalidates every cached binary ABI hash.
+ARG VCPKG_COMMIT=4334d8b4c8916018600212ab4dd4bbdc343065d1
+ENV VCPKG_COMMIT=${VCPKG_COMMIT}
 
 # Install AWS CLI (only needed for authenticated S3 access)
 RUN ARCH=$(uname -m) && \

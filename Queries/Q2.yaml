@@ -1,0 +1,78 @@
+# Q2 - Location-Based Noise Monitoring
+# Reference: nebulastream-private MeosSNCBQuery2.cpp
+#   .filter(tpointatstbox(...) == 1 && speed > 0 && PCFA_mbar > 0
+#           && speed*0.5 + PCFA_mbar*0.5 > 2)
+#   .window(TumblingWindow) .apply(Max(PCFA_mbar))
+# Deploy: nebucli -t Queries/Q2.yaml start
+
+query: |
+  SELECT start, end, MAX(pcfa_mbar) AS max_pcfa
+  FROM sncb_stream
+  WHERE tgeo_at_stbox(MovingPoint(gps_lon, gps_lat, ts), SpatioTemporalBox(FLOAT64(3.0), FLOAT64(4.0), FLOAT64(50.8), FLOAT64(51.4), UINT64(1722657600), UINT64(1722664800)))
+    AND gsp_speed > FLOAT64(0.0) AND pcfa_mbar > FLOAT64(0.0)
+    AND gsp_speed * FLOAT64(0.5) + pcfa_mbar * FLOAT64(0.5) > FLOAT64(2.0)
+  WINDOW TUMBLING(ts, SIZE 600 ms)
+  INTO Q2_SINK
+
+sinks:
+  - name: Q2_SINK
+    host: localhost:8080
+    type: File
+    schema:
+      - name: SNCB_STREAM$START
+        type: UINT64
+      - name: SNCB_STREAM$END
+        type: UINT64
+      - name: SNCB_STREAM$MAX_PCFA
+        type: FLOAT64
+    config:
+      file_path: "Output/q2_noise_monitoring.json"
+      output_format: "JSON"
+      append: "false"
+
+logical:
+  - name: sncb_stream
+    schema:
+      - name: ts
+        type: UINT64
+      - name: deviceid
+        type: UINT64
+      - name: vbat
+        type: FLOAT64
+      - name: pcfa_mbar
+        type: FLOAT64
+      - name: pcff_mbar
+        type: FLOAT64
+      - name: pcf1_mbar
+        type: FLOAT64
+      - name: pcf2_mbar
+        type: FLOAT64
+      - name: t1_mbar
+        type: FLOAT64
+      - name: t2_mbar
+        type: FLOAT64
+      - name: code1
+        type: FLOAT64
+      - name: code2
+        type: FLOAT64
+      - name: gsp_speed
+        type: FLOAT64
+      - name: gps_lat
+        type: FLOAT64
+      - name: gps_lon
+        type: FLOAT64
+
+physical:
+  - logical: sncb_stream
+    host: localhost:8080
+    type: File
+    parser_config:
+      type: CSV
+      fieldDelimiter: ","
+    source_config:
+      file_path: "nes-systests/testdata/small/sncb_demo.csv"
+
+workers:
+  - host: localhost:8080
+    data_address: localhost:9090
+    max_operators: 10000
