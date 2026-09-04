@@ -9,7 +9,7 @@
 # Deploy: nebucli -t Queries/Q3.yaml start
 
 query: |
-  SELECT ts, deviceid, gsp_speed, vbat
+  SELECT ts, deviceid, gsp_speed, vbat, gps_lat, gps_lon
   FROM (SELECT * FROM sncb_stream)
   INNER JOIN (SELECT zts, hlon, hlat, ts FROM highrisk_zone
               WHERE edwithin_tgeo_geo(MovingPoint(hlon, hlat, ts), polygon, FLOAT64(0.01)))
@@ -29,6 +29,10 @@ sinks:
       - name: SNCB_STREAM$GSP_SPEED
         type: FLOAT64
       - name: SNCB_STREAM$VBAT
+        type: FLOAT64
+      - name: SNCB_STREAM$GPS_LAT
+        type: FLOAT64
+      - name: SNCB_STREAM$GPS_LON
         type: FLOAT64
     config:
       file_path: "Output/q3_dynamic_speed_limit.json"
