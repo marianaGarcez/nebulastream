@@ -503,6 +503,12 @@ double Meos::safe_nad_tgeo_tgeo(const Temporal* temp1, const Temporal* temp2)
     return nad_tgeo_tgeo(temp1, temp2);
 }
 
+double Meos::safe_nad_tgeo_stbox(const Temporal* temp, const STBox* box)
+{
+    std::lock_guard<std::mutex> lk(meos_exec_mutex);
+    return nad_tgeo_stbox(temp, box);
+}
+
 // SpatioTemporalBox implementation
 Meos::SpatioTemporalBox::SpatioTemporalBox(const std::string& wkt_string)
 {

@@ -207,6 +207,7 @@ class Meos {
     static int safe_eintersects_tgeo_geo(const Temporal* temp, const GSERIALIZED* gs);
     static Temporal* safe_tgeo_at_stbox(const Temporal* temp, const STBox* box, bool border_inc);
     static double safe_nad_tgeo_tgeo(const Temporal* temp1, const Temporal* temp2);
+    static double safe_nad_tgeo_stbox(const Temporal* temp, const STBox* box);
 
     /**
      * @brief Parse a temporal point string into a MEOS Temporal object

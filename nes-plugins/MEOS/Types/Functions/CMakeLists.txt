@@ -21,6 +21,12 @@ add_plugin_as_library(TGEO_AT_STBOX_MovingPoint_SpatioTemporalBox PhysicalFuncti
 add_plugin_as_library(TEMPORAL_EINTERSECTS_GEOMETRY LogicalFunction nes-logical-operators-registry temporal_eintersects_geometry_logical_function TemporalEIntersectsGeometryLogicalFunction.cpp)
 add_plugin_as_library(TEMPORAL_EINTERSECTS_GEOMETRY_MovingPoint_Polygon PhysicalFunction nes-physical-operators-registry temporal_eintersects_geometry_movingpoint_polygon_physical_function TPointEIntersectsPolygonPhysicalFunction.cpp)
 
+add_plugin_as_library(EDWITHIN_TGEO_GEO LogicalFunction nes-logical-operators-registry edwithin_tgeo_geo_logical_function EdwithinTgeoGeoLogicalFunction.cpp)
+add_plugin_as_library(EDWITHIN_TGEO_GEO_MovingPoint_Polygon_FLOAT64 PhysicalFunction nes-physical-operators-registry edwithin_tgeo_geo_physical_function TpointEdwithinPolygonPhysicalFunction.cpp)
+
+add_plugin_as_library(NAD_TGEO_STBOX LogicalFunction nes-logical-operators-registry nad_tgeo_stbox_logical_function NadTgeoStboxLogicalFunction.cpp)
+add_plugin_as_library(NAD_TGEO_STBOX_MovingPoint_SpatioTemporalBox PhysicalFunction nes-physical-operators-registry nad_tgeo_stbox_movingpoint_physical_function TpointNadStboxPhysicalFunction.cpp)
+
 
 
 target_include_directories(nearest_approach_distance_logical_function
@@ -53,7 +59,23 @@ target_include_directories(temporal_eintersects_geometry_movingpoint_polygon_phy
 )
 target_link_libraries(temporal_eintersects_geometry_movingpoint_polygon_physical_function PUBLIC nes-meos)
 
+target_include_directories(nad_tgeo_stbox_logical_function
+        PUBLIC include
+        PRIVATE .
+)
+target_include_directories(nad_tgeo_stbox_movingpoint_physical_function
+        PUBLIC include
+        PRIVATE .
+)
+target_link_libraries(nad_tgeo_stbox_movingpoint_physical_function PUBLIC nes-meos)
 
 
-
-
+target_include_directories(edwithin_tgeo_geo_logical_function
+        PUBLIC include
+        PRIVATE .
+)
+target_include_directories(edwithin_tgeo_geo_physical_function
+        PUBLIC include
+        PRIVATE .
+)
+target_link_libraries(edwithin_tgeo_geo_physical_function PUBLIC nes-meos)

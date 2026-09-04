@@ -64,17 +64,24 @@ PhysicalFunction FunctionProvider::lowerFunction(LogicalFunction logicalFunction
         .childFunctions = childFunctions, .inputTypes = inputTypes, .outputType = logicalFunction.getDataType()};
 
     /// 3a. Per-struct operator dispatch. When at least one operand is a STRUCT, prefer a
-    /// keyed plugin variant `<FuncType>_<typeKey(L)>_<typeKey(R)>` so plugins can register
-    /// struct-specific semantics (e.g. `Greater_Reading_Reading`) without core knowing about
-    /// any particular struct. Falls through to the generic registry if no override exists.
+    /// keyed plugin variant `<FuncType>_<typeKey(arg0)>_<typeKey(arg1)>_...` so plugins can
+    /// register struct-specific semantics (e.g. `Greater_Reading_Reading`) without core knowing
+    /// about any particular struct. Falls through to the generic registry if no override exists.
+    /// The key spans every operand, so functions of any arity can be specialized - binary
+    /// operators keep exactly the key they had before.
     const auto baseName = std::string(logicalFunction.getType());
-    if (inputTypes.size() == 2 && std::ranges::any_of(inputTypes, [](const auto& t) { return t.type == DataType::Type::STRUCT; }))
+    if (!inputTypes.empty() && std::ranges::any_of(inputTypes, [](const auto& t) { return t.type == DataType::Type::STRUCT; }))
     {
         const auto typeKey = [](const DataType& dt) -> std::string
         {
             return dt.type == DataType::Type::STRUCT ? dt.structName : std::string(magic_enum::enum_name(dt.type));
         };
-        const auto specializedName = fmt::format("{}_{}_{}", baseName, typeKey(inputTypes[0]), typeKey(inputTypes[1]));
+        auto specializedName = baseName;
+        for (const auto& inputType : inputTypes)
+        {
+            specializedName += '_';
+            specializedName += typeKey(inputType);
+        }
         if (const auto function = PhysicalFunctionRegistry::instance().create(specializedName, executableFunctionArguments))
         {
             return function.value();

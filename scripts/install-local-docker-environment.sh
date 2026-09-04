@@ -388,8 +388,11 @@ if [ -S "$DOCKER_SOCKET" ]; then
     echo "Detected docker socket at: $DOCKER_SOCKET"
     echo ""
     echo "Command line:"
-    echo "  docker run -v $DOCKER_SOCKET:/var/run/docker.sock \\"
-    echo "    -v \$(pwd):\$(pwd) -w \$(pwd) nebulastream/nes-development:local"
+    # -it is required: the image's CMD is /bin/bash, which exits immediately without a TTY.
+    echo "  docker run -it --rm -v \"$DOCKER_SOCKET\":/var/run/docker.sock \\"
+    # Quote \$(pwd): unquoted it word-splits on checkout paths containing spaces,
+    # and docker then parses the tail of the path as the image name.
+    echo "    -v \"\$(pwd)\":\"\$(pwd)\" -w \"\$(pwd)\" nebulastream/nes-development:local"
     echo ""
     echo "CLion Docker Toolchain (Settings → Docker → Container settings → Run options):"
     echo "  -v $DOCKER_SOCKET:/var/run/docker.sock"

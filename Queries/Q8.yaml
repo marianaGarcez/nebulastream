@@ -1,0 +1,135 @@
+# Q8 - Monitoring Brakes
+# Reference: nebulastream-private MeosSNCBQuery8.cpp
+#   pressureQuery = from("gps").filter(Code1 > 0 && (PCFA<1.9 || ... ))
+#   from("gps").filter(tedwithin(...)==1).joinWith(pressureQuery)
+#
+#   Two deviations forced by the engine:
+#     1. edwithin needs its geometry from a data column, so the fixed geofence uses
+#        the equivalent nad_tgeo_stbox(...) <= d against an in-query box.
+#     2. A join needs the window timestamp under the same name in both inputs, which
+#        makes `ts = ts` ambiguous, so the join is on deviceid and the tumbling
+#        window supplies temporal alignment.
+# Deploy: nebucli -t Queries/Q8.yaml start
+
+query: |
+  SELECT ts, deviceid, gsp_speed, gps_lat, gps_lon, ppcfa_mbar, ppcff_mbar
+  FROM (SELECT * FROM sncb_stream
+        WHERE nad_tgeo_stbox(MovingPoint(gps_lon, gps_lat, ts), SpatioTemporalBox(FLOAT64(3.0), FLOAT64(4.0), FLOAT64(50.8), FLOAT64(51.4), UINT64(1722657600), UINT64(1722664800))) <= FLOAT64(0.01))
+  INNER JOIN (SELECT * FROM sncb_pressure
+              WHERE pcode1 > FLOAT64(0.0)
+                AND (ppcfa_mbar < FLOAT64(1.9) OR ppcff_mbar < FLOAT64(1.4)
+                     OR ppcf1_mbar < FLOAT64(0.8) OR ppcf2_mbar < FLOAT64(1.0)
+                     OR ppcfa_mbar > FLOAT64(3.0) OR ppcff_mbar > FLOAT64(2.1)
+                     OR ppcf1_mbar > FLOAT64(1.3) OR ppcf2_mbar > FLOAT64(1.6)))
+  ON deviceid = pdeviceid
+  WINDOW TUMBLING(ts, SIZE 600 ms)
+  INTO Q8_SINK
+
+sinks:
+  - name: Q8_SINK
+    host: localhost:8080
+    type: File
+    schema:
+      - name: SNCB_STREAM$TS
+        type: UINT64
+      - name: SNCB_STREAM$DEVICEID
+        type: UINT64
+      - name: SNCB_STREAM$GSP_SPEED
+        type: FLOAT64
+      - name: SNCB_STREAM$GPS_LAT
+        type: FLOAT64
+      - name: SNCB_STREAM$GPS_LON
+        type: FLOAT64
+      - name: SNCB_PRESSURE$PPCFA_MBAR
+        type: FLOAT64
+      - name: SNCB_PRESSURE$PPCFF_MBAR
+        type: FLOAT64
+    config:
+      file_path: "Output/q8_monitoring_brakes.json"
+      output_format: "JSON"
+      append: "false"
+
+logical:
+  - name: sncb_stream
+    schema:
+      - name: ts
+        type: UINT64
+      - name: deviceid
+        type: UINT64
+      - name: vbat
+        type: FLOAT64
+      - name: pcfa_mbar
+        type: FLOAT64
+      - name: pcff_mbar
+        type: FLOAT64
+      - name: pcf1_mbar
+        type: FLOAT64
+      - name: pcf2_mbar
+        type: FLOAT64
+      - name: t1_mbar
+        type: FLOAT64
+      - name: t2_mbar
+        type: FLOAT64
+      - name: code1
+        type: FLOAT64
+      - name: code2
+        type: FLOAT64
+      - name: gsp_speed
+        type: FLOAT64
+      - name: gps_lat
+        type: FLOAT64
+      - name: gps_lon
+        type: FLOAT64
+  - name: sncb_pressure
+    schema:
+      - name: ts
+        type: UINT64
+      - name: pdeviceid
+        type: UINT64
+      - name: pvbat
+        type: FLOAT64
+      - name: ppcfa_mbar
+        type: FLOAT64
+      - name: ppcff_mbar
+        type: FLOAT64
+      - name: ppcf1_mbar
+        type: FLOAT64
+      - name: ppcf2_mbar
+        type: FLOAT64
+      - name: pt1_mbar
+        type: FLOAT64
+      - name: pt2_mbar
+        type: FLOAT64
+      - name: pcode1
+        type: FLOAT64
+      - name: pcode2
+        type: FLOAT64
+      - name: pgsp_speed
+        type: FLOAT64
+      - name: pgps_lat
+        type: FLOAT64
+      - name: pgps_lon
+        type: FLOAT64
+
+physical:
+  - logical: sncb_stream
+    host: localhost:8080
+    type: File
+    parser_config:
+      type: CSV
+      fieldDelimiter: ","
+    source_config:
+      file_path: "nes-systests/testdata/small/sncb_demo.csv"
+  - logical: sncb_pressure
+    host: localhost:8080
+    type: File
+    parser_config:
+      type: CSV
+      fieldDelimiter: ","
+    source_config:
+      file_path: "nes-systests/testdata/small/sncb_demo.csv"
+
+workers:
+  - host: localhost:8080
+    data_address: localhost:9090
+    max_operators: 10000
