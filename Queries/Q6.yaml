@@ -6,7 +6,7 @@
 # Deploy: nebucli -t Queries/Q6.yaml start
 
 query: |
-  SELECT ts, deviceid,
+  SELECT ts, deviceid, gps_lat, gps_lon,
          (t1_mbar + t2_mbar + pcf1_mbar + pcf2_mbar) / FLOAT64(4.0) AS passenger_count,
          FLOAT64(20.0) AS adjusted_temp, FLOAT64(80.0) AS adjusted_light
   FROM sncb_stream
@@ -24,6 +24,10 @@ sinks:
         type: UINT64
       - name: SNCB_STREAM$DEVICEID
         type: UINT64
+      - name: SNCB_STREAM$GPS_LAT
+        type: FLOAT64
+      - name: SNCB_STREAM$GPS_LON
+        type: FLOAT64
       - name: PASSENGER_COUNT
         type: FLOAT64
       - name: ADJUSTED_TEMP
