@@ -13,6 +13,7 @@
 */
 
 #pragma once
+#include <Arena.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -61,7 +62,7 @@ public:
         const nautilus::val<uint64_t>& recordIndex,
         const InputFormatIndexer& indexer,
         nautilus::val<RawBufferIndex*> rawBufferIndex,
-        const TupleBufferRef& bufferRef) const
+        const TupleBufferRef& bufferRef, ArenaRef& /*arena*/) const
         = 0;
 
     [[nodiscard]] virtual TupleDelimiterOffsets getTupleDelimiterOffsets() const = 0;

@@ -19,9 +19,9 @@
 #include <limits>
 #include <utility>
 #include <Functions/PhysicalFunction.hpp>
-#include <Nautilus/DataTypes/StructData.hpp>
-#include <Nautilus/DataTypes/VarVal.hpp>
-#include <Nautilus/Interface/Record.hpp>
+#include <DataTypes/StructData.hpp>
+#include <DataTypes/VarVal.hpp>
+#include <Interface/Record.hpp>
 #include <nautilus/function.hpp>
 #include <nautilus/val.hpp>
 

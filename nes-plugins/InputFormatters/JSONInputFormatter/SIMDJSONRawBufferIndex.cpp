@@ -128,6 +128,10 @@ void writeValueToRecord(
             record.write(fieldName, parseJsonVarSized(fieldIndex, rawBufferIndex, indexer, dataType.nullable));
             return;
         }
+        case DataType::Type::FIXEDSIZED:
+        case DataType::Type::STRUCT:
+        case DataType::Type::VARARRAY:
+            throw NotImplemented("Composite types require the NestedJSON input formatter; standard JSON does not support them.");
         case DataType::Type::UNDEFINED:
             throw NotImplemented("Cannot parse undefined type.");
     }
@@ -140,7 +144,7 @@ Record SIMDJSONRawBufferIndex::readSpanningRecord(
     const nautilus::val<uint64_t>&,
     const InputFormatIndexer& indexer,
     nautilus::val<RawBufferIndex*> rawBufferIndex,
-    const TupleBufferRef& bufferRef) const
+    const TupleBufferRef& bufferRef, ArenaRef& /*arena*/) const
 {
     Record record;
     const auto numberOfFields = bufferRef.getAllDataTypes().size();

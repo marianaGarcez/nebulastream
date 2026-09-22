@@ -282,6 +282,11 @@ bool compareStringAsTypeWithError(const DataType::Type type, const ExpectedResul
             return compareStringAsTypeWithError<float>(left.getRawValue(), right.getRawValue());
         case DataType::Type::FLOAT64:
             return compareStringAsTypeWithError<double>(left.getRawValue(), right.getRawValue());
+        case DataType::Type::FIXEDSIZED:
+        case DataType::Type::STRUCT:
+        case DataType::Type::VARARRAY:
+            /// Composite results use exact serialized-text comparison, including nested numbers.
+            return left.getRawValue() == right.getRawValue();
         case DataType::Type::UNDEFINED:
             throw UnknownDataType("Not supporting UNDEFINED in result check comparison");
     }

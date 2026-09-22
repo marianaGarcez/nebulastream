@@ -10,10 +10,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-include(${PROJECT_SOURCE_DIR}/cmake/PluginRegistrationUtil.cmake)
-add_plugin_as_library(NestedJSON InputFormatIndexer nes-input-formatters-registry nested_json_input_format_indexer_plugin_library NestedJSONInputFormatIndexer.cpp NestedJSONRawBufferIndex.cpp)
+include(${PROJECT_SOURCE_DIR}/cmake/RuntimeRegistrationUtil.cmake)
+
+# One implementation library serving all registries this plugin participates in.
+add_library(nested_json_input_format_indexer_plugin_library STATIC NestedJSONInputFormatIndexer.cpp NestedJSONRawBufferIndex.cpp)
+target_link_libraries(nested_json_input_format_indexer_plugin_library PRIVATE nes-input-formatters)
 target_include_directories(nested_json_input_format_indexer_plugin_library PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/)
-target_include_directories(nested_json_input_format_indexer_plugin_library PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../Common)
 
 find_package(simdjson CONFIG REQUIRED)
 target_link_libraries(nested_json_input_format_indexer_plugin_library PRIVATE simdjson::simdjson)
+
+link_plugin_library(nes-input-formatters nested_json_input_format_indexer_plugin_library)
+# plugin_name NestedJSON: the indexer class/header are NestedJSONInputFormatIndexer; the registry key stays JSON.
+add_registry_entry(InputFormatIndexer NestedJSON KEY NestedJSON)
+
+add_registry_entry(InputFormatterValidation NestedJSON KEY NestedJSON)
+
+target_include_directories(nested_json_input_format_indexer_plugin_library PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../Common)

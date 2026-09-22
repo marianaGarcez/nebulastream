@@ -20,7 +20,8 @@
 #include <vector>
 
 #include <DataTypes/DataType.hpp>
-#include <DataTypes/Schema.hpp>
+#include <Schema/Schema.hpp>
+#include <Schema/Field.hpp>
 #include <Functions/LogicalFunction.hpp>
 #include <Serialization/LogicalFunctionReflection.hpp>
 #include <Util/PlanRenderer.hpp>
@@ -50,7 +51,7 @@ TemporalEIntersectsGeometryLogicalFunction TemporalEIntersectsGeometryLogicalFun
     return copy;
 }
 
-LogicalFunction TemporalEIntersectsGeometryLogicalFunction::withInferredDataType(const Schema& schema) const
+LogicalFunction TemporalEIntersectsGeometryLogicalFunction::withInferredDataType(const Schema<Field, Unordered>& schema) const
 {
     const auto newChildren = getChildren() | std::views::transform([&schema](auto& c) { return c.withInferredDataType(schema); })
         | std::ranges::to<std::vector>();
@@ -99,14 +100,14 @@ std::string TemporalEIntersectsGeometryLogicalFunction::explain(ExplainVerbosity
     return fmt::format("temporal_eintersects_geometry({}, {})", leftChild.explain(verbosity), rightChild.explain(verbosity));
 }
 
-Reflected Reflector<TemporalEIntersectsGeometryLogicalFunction>::operator()(const TemporalEIntersectsGeometryLogicalFunction& function) const
+Reflected Reflector<TemporalEIntersectsGeometryLogicalFunction>::operator()(const TemporalEIntersectsGeometryLogicalFunction& function, const ReflectionContext& context) const
 {
-    return reflect(detail::ReflectedTemporalEIntersectsGeometryLogicalFunction{.left = function.leftChild, .right = function.rightChild});
+    return context.reflect(detail::ReflectedTemporalEIntersectsGeometryLogicalFunction{.left = function.leftChild, .right = function.rightChild});
 }
 
-TemporalEIntersectsGeometryLogicalFunction Unreflector<TemporalEIntersectsGeometryLogicalFunction>::operator()(const Reflected& reflected) const
+TemporalEIntersectsGeometryLogicalFunction Unreflector<TemporalEIntersectsGeometryLogicalFunction>::operator()(const Reflected& reflected, const ReflectionContext& context) const
 {
-    auto [left, right] = unreflect<detail::ReflectedTemporalEIntersectsGeometryLogicalFunction>(reflected);
+    auto [left, right] = context.unreflect<detail::ReflectedTemporalEIntersectsGeometryLogicalFunction>(reflected);
     if (!left.has_value() || !right.has_value())
     {
         throw CannotDeserialize("TemporalEIntersectsGeometryLogicalFunction is missing its child");
@@ -117,10 +118,6 @@ TemporalEIntersectsGeometryLogicalFunction Unreflector<TemporalEIntersectsGeomet
 LogicalFunctionRegistryReturnType
 LogicalFunctionGeneratedRegistrar::RegisterTEMPORAL_EINTERSECTS_GEOMETRYLogicalFunction(LogicalFunctionRegistryArguments arguments)
 {
-    if (!arguments.reflected.isEmpty())
-    {
-        return unreflect<TemporalEIntersectsGeometryLogicalFunction>(arguments.reflected);
-    }
     if (arguments.children.size() != 2)
     {
         throw CannotDeserialize("TemporalEIntersectsGeometryLogicalFunction requires exactly two children, but got {}", arguments.children.size());

@@ -21,6 +21,9 @@
 #include <DataTypes/DataTypesUtil.hpp>
 #include <DataTypes/VarVal.hpp>
 #include <DataTypes/VariableSizedData.hpp>
+#include <DataTypes/StructData.hpp>
+#include <DataTypes/FixedSizedData.hpp>
+#include <DataTypes/VarArrayData.hpp>
 #include <Interface/Record.hpp>
 #include <ErrorHandling.hpp>
 #include <static.hpp>
@@ -32,8 +35,32 @@ namespace NES
 
 namespace
 {
-/// Reads a single field value from @param address, honoring the leading null-byte convention. Non-VARSIZED
-/// values are read directly; for VARSIZED the (pointer, length) pair is resolved by @param loadVarSized.
+/// Array payloads may be copied verbatim only if they contain no indirect values.
+bool hasIndirectValues(const DataType& type)
+{
+    if (type.type == DataType::Type::VARSIZED || type.type == DataType::Type::VARARRAY)
+    {
+        return true;
+    }
+    if (type.type == DataType::Type::STRUCT)
+    {
+        for (const auto& field : type.fields)
+        {
+            if (hasIndirectValues(field.second))
+            {
+                return true;
+            }
+        }
+    }
+    if (type.type == DataType::Type::FIXEDSIZED)
+    {
+        return hasIndirectValues(type.elementType.at(0));
+    }
+    return false;
+}
+
+/// Reads a field honoring the leading null byte. Indirect struct fields are resolved lazily;
+/// their stored references must remain unchanged for subsequent readers.
 VarVal readFieldValue(const DataType& dataType, const nautilus::val<int8_t*>& address, const VarSizedLoadFn& loadVarSized)
 {
     /// For now, we store the null byte before the actual VarVal
@@ -45,6 +72,32 @@ VarVal readFieldValue(const DataType& dataType, const nautilus::val<int8_t*>& ad
         null = readValueFromMemRef<bool>(address);
         varValRef += 1;
     }
+    if (dataType.type == DataType::Type::STRUCT && hasIndirectValues(dataType))
+    {
+        auto loader = [loadVarSized](const DataType& type, const nautilus::val<int8_t*>& ptr)
+        {
+            auto nestedType = type;
+            nestedType.nullable = false; // Existing composite layout omits nested null bytes.
+            return readFieldValue(nestedType, ptr, loadVarSized);
+        };
+        return VarVal{StructData{varValRef, dataType.fields, std::move(loader)}, dataType.nullable, null};
+    }
+    if (dataType.type == DataType::Type::VARARRAY)
+    {
+        if (hasIndirectValues(dataType.elementType.at(0)))
+            throw NotImplemented("Stored variable arrays with indirect elements are not supported");
+        nautilus::val<int8_t*> ptr = nullptr;
+        nautilus::val<uint64_t> len = 0;
+        if (!null)
+        {
+            const auto loaded = loadVarSized(varValRef);
+            ptr = loaded.first;
+            len = loaded.second;
+        }
+        return VarVal{VarArrayData{ptr, dataType.elementType.at(0), len}, dataType.nullable, null};
+    }
+    if (dataType.type == DataType::Type::FIXEDSIZED && hasIndirectValues(dataType))
+        throw NotImplemented("Stored fixed arrays with indirect elements are not supported");
     if (dataType.type != DataType::Type::VARSIZED)
     {
         return VarVal::readVarValFromMemory(varValRef, dataType, null);
@@ -53,8 +106,7 @@ VarVal readFieldValue(const DataType& dataType, const nautilus::val<int8_t*>& ad
     return VarVal{VariableSizedData{ptr, len}, dataType.nullable, null};
 }
 
-/// Writes a single field value to @param address, honoring the leading null-byte convention. Non-VARSIZED
-/// values go through storeValueFunctionMap; for VARSIZED the payload is stored by @param storeVarSized.
+/// Writes inline composite fields recursively and copies indirect payloads through the layout's storage callback.
 void writeFieldValue(
     const DataType& dataType, const nautilus::val<int8_t*>& address, const VarVal& value, const VarSizedStoreFn& storeVarSized)
 {
@@ -65,6 +117,42 @@ void writeFieldValue(
         /// Writing the null value to the first byte and then incrementing the memref by 1 byte to store the actual value
         VarVal{value.isNull()}.writeToMemory(addressToWriteValue);
         addressToWriteValue += 1;
+    }
+    if (dataType.type == DataType::Type::STRUCT)
+    {
+        const auto composite = value.getRawValueAs<StructData>();
+        uint64_t offset = 0;
+        if (!value.isNull())
+        {
+            for (nautilus::static_val<size_t> i = 0; i < dataType.fields.size(); ++i)
+            {
+                const auto& fieldType = dataType.fields[i].second;
+                if (fieldType.nullable)
+                {
+                    throw NotImplemented("Stored structs with nullable nested fields are not supported");
+                }
+                writeFieldValue(fieldType, addressToWriteValue + nautilus::val<uint64_t>{offset}, composite.at(i), storeVarSized);
+                offset += fieldType.getSizeInBytesWithoutNull();
+            }
+        }
+        return;
+    }
+    if (dataType.type == DataType::Type::FIXEDSIZED)
+    {
+        if (hasIndirectValues(dataType))
+            throw NotImplemented("Stored fixed arrays with indirect elements are not supported");
+        if (!value.isNull())
+            value.writeToMemory(addressToWriteValue);
+        return;
+    }
+    if (dataType.type == DataType::Type::VARARRAY)
+    {
+        if (hasIndirectValues(dataType.elementType.at(0)))
+            throw NotImplemented("Stored variable arrays with indirect elements are not supported");
+        const auto array = value.getRawValueAs<VarArrayData>();
+        if (!value.isNull())
+            storeVarSized(addressToWriteValue, VarVal{VariableSizedData{array.getRawPtr(), array.getTotalSizeInBytes()}});
+        return;
     }
     if (dataType.type != DataType::Type::VARSIZED)
     {

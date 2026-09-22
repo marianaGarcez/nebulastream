@@ -20,7 +20,8 @@
 #include <vector>
 
 #include <DataTypes/DataType.hpp>
-#include <DataTypes/Schema.hpp>
+#include <Schema/Schema.hpp>
+#include <Schema/Field.hpp>
 #include <Functions/LogicalFunction.hpp>
 #include <Serialization/LogicalFunctionReflection.hpp>
 #include <Util/PlanRenderer.hpp>
@@ -49,7 +50,7 @@ NadTgeoStboxLogicalFunction NadTgeoStboxLogicalFunction::withDataType(const Data
     return copy;
 }
 
-LogicalFunction NadTgeoStboxLogicalFunction::withInferredDataType(const Schema& schema) const
+LogicalFunction NadTgeoStboxLogicalFunction::withInferredDataType(const Schema<Field, Unordered>& schema) const
 {
     const auto newChildren = getChildren() | std::views::transform([&schema](auto& c) { return c.withInferredDataType(schema); })
         | std::ranges::to<std::vector>();
@@ -109,14 +110,14 @@ std::string NadTgeoStboxLogicalFunction::explain(ExplainVerbosity verbosity) con
     return fmt::format("nad_tgeo_stbox({}, {})", leftChild.explain(verbosity), rightChild.explain(verbosity));
 }
 
-Reflected Reflector<NadTgeoStboxLogicalFunction>::operator()(const NadTgeoStboxLogicalFunction& function) const
+Reflected Reflector<NadTgeoStboxLogicalFunction>::operator()(const NadTgeoStboxLogicalFunction& function, const ReflectionContext& context) const
 {
-    return reflect(detail::ReflectedNadTgeoStboxLogicalFunction{.left = function.leftChild, .right = function.rightChild});
+    return context.reflect(detail::ReflectedNadTgeoStboxLogicalFunction{.left = function.leftChild, .right = function.rightChild});
 }
 
-NadTgeoStboxLogicalFunction Unreflector<NadTgeoStboxLogicalFunction>::operator()(const Reflected& reflected) const
+NadTgeoStboxLogicalFunction Unreflector<NadTgeoStboxLogicalFunction>::operator()(const Reflected& reflected, const ReflectionContext& context) const
 {
-    auto [left, right] = unreflect<detail::ReflectedNadTgeoStboxLogicalFunction>(reflected);
+    auto [left, right] = context.unreflect<detail::ReflectedNadTgeoStboxLogicalFunction>(reflected);
     if (!left.has_value() || !right.has_value())
     {
         throw CannotDeserialize("NadTgeoStboxLogicalFunction is missing its child");
@@ -127,10 +128,6 @@ NadTgeoStboxLogicalFunction Unreflector<NadTgeoStboxLogicalFunction>::operator()
 LogicalFunctionRegistryReturnType
 LogicalFunctionGeneratedRegistrar::RegisterNAD_TGEO_STBOXLogicalFunction(LogicalFunctionRegistryArguments arguments)
 {
-    if (!arguments.reflected.isEmpty())
-    {
-        return unreflect<NadTgeoStboxLogicalFunction>(arguments.reflected);
-    }
     if (arguments.children.size() != 2)
     {
         throw CannotDeserialize("NadTgeoStboxLogicalFunction requires exactly two children, but got {}", arguments.children.size());

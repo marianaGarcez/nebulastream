@@ -66,7 +66,7 @@ Record FieldOffsetRawBufferIndex::readSpanningRecord(
     const nautilus::val<uint64_t>& recordIndex,
     const InputFormatIndexer& indexer,
     nautilus::val<RawBufferIndex*> rawBufferIndex,
-    const TupleBufferRef& bufferRef) const
+    const TupleBufferRef& bufferRef, ArenaRef& /*arena*/) const
 {
     Record record;
     const auto indexBufferPtr = nautilus::invoke(getIndexValuesProxy, rawBufferIndex);

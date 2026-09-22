@@ -177,6 +177,9 @@ rc::Gen<AnyVec> genAnyVec(std::vector<DataType> types)
                     }
                     case DataType::Type::BOOLEAN:
                     case DataType::Type::CHAR:
+                    case DataType::Type::FIXEDSIZED:
+                    case DataType::Type::STRUCT:
+                    case DataType::Type::VARARRAY:
                     case DataType::Type::UNDEFINED:
                         throw TestException("Unsupported type for genAnyVec");
                 }
@@ -227,6 +230,9 @@ int compareAnyField(const std::any& lhs, const std::any& rhs, DataType type)
             return std::any_cast<const std::string&>(lhs).compare(std::any_cast<const std::string&>(rhs));
         case DataType::Type::BOOLEAN:
         case DataType::Type::CHAR:
+        case DataType::Type::FIXEDSIZED:
+        case DataType::Type::STRUCT:
+        case DataType::Type::VARARRAY:
         case DataType::Type::UNDEFINED:
             throw TestException("Unsupported type for compareAnyField");
     }
@@ -272,6 +278,9 @@ size_t hashAnyField(const std::any& value, DataType type)
             return hashTyped<std::string>(value, type.nullable);
         case DataType::Type::BOOLEAN:
         case DataType::Type::CHAR:
+        case DataType::Type::FIXEDSIZED:
+        case DataType::Type::STRUCT:
+        case DataType::Type::VARARRAY:
         case DataType::Type::UNDEFINED:
             throw TestException("Unsupported type for hashAnyField");
     }
@@ -376,6 +385,9 @@ void storeVarValToAnyVec(const nautilus::val<AnyVec*>& out, uint64_t pos, const 
         }
         case DataType::Type::BOOLEAN:
         case DataType::Type::CHAR:
+        case DataType::Type::FIXEDSIZED:
+        case DataType::Type::STRUCT:
+        case DataType::Type::VARARRAY:
         case DataType::Type::UNDEFINED:
             throw TestException("Unsupported type for TestablePagedVector");
     }
@@ -498,6 +510,9 @@ VarVal buildVarVal(const nautilus::val<AnyVec*>& rec, uint64_t fieldIdx, DataTyp
         }
         case DataType::Type::BOOLEAN:
         case DataType::Type::CHAR:
+        case DataType::Type::FIXEDSIZED:
+        case DataType::Type::STRUCT:
+        case DataType::Type::VARARRAY:
         case DataType::Type::UNDEFINED:
             break;
     }

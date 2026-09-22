@@ -20,7 +20,8 @@
 #include <vector>
 
 #include <DataTypes/DataType.hpp>
-#include <DataTypes/Schema.hpp>
+#include <Schema/Schema.hpp>
+#include <Schema/Field.hpp>
 #include <Functions/LogicalFunction.hpp>
 #include <Serialization/LogicalFunctionReflection.hpp>
 #include <Util/PlanRenderer.hpp>
@@ -49,7 +50,7 @@ PointCircleContainsLogicalFunction PointCircleContainsLogicalFunction::withDataT
     return copy;
 }
 
-LogicalFunction PointCircleContainsLogicalFunction::withInferredDataType(const Schema& schema) const
+LogicalFunction PointCircleContainsLogicalFunction::withInferredDataType(const Schema<Field, Unordered>& schema) const
 {
     const auto newChildren = getChildren() | std::views::transform([&schema](auto& c) { return c.withInferredDataType(schema); })
         | std::ranges::to<std::vector>();
@@ -111,14 +112,14 @@ std::string PointCircleContainsLogicalFunction::explain(ExplainVerbosity verbosi
     return fmt::format("point_circle_contains({}, {})", leftChild.explain(verbosity), rightChild.explain(verbosity));
 }
 
-Reflected Reflector<PointCircleContainsLogicalFunction>::operator()(const PointCircleContainsLogicalFunction& function) const
+Reflected Reflector<PointCircleContainsLogicalFunction>::operator()(const PointCircleContainsLogicalFunction& function, const ReflectionContext& context) const
 {
-    return reflect(detail::ReflectedPointCircleContainsLogicalFunction{.left = function.leftChild, .right = function.rightChild});
+    return context.reflect(detail::ReflectedPointCircleContainsLogicalFunction{.left = function.leftChild, .right = function.rightChild});
 }
 
-PointCircleContainsLogicalFunction Unreflector<PointCircleContainsLogicalFunction>::operator()(const Reflected& reflected) const
+PointCircleContainsLogicalFunction Unreflector<PointCircleContainsLogicalFunction>::operator()(const Reflected& reflected, const ReflectionContext& context) const
 {
-    auto [left, right] = unreflect<detail::ReflectedPointCircleContainsLogicalFunction>(reflected);
+    auto [left, right] = context.unreflect<detail::ReflectedPointCircleContainsLogicalFunction>(reflected);
     if (!left.has_value() || !right.has_value())
     {
         throw CannotDeserialize("PointCircleContainsLogicalFunction is missing its child");
@@ -129,10 +130,6 @@ PointCircleContainsLogicalFunction Unreflector<PointCircleContainsLogicalFunctio
 LogicalFunctionRegistryReturnType
 LogicalFunctionGeneratedRegistrar::RegisterPOINT_CIRCLE_CONTAINSLogicalFunction(LogicalFunctionRegistryArguments arguments)
 {
-    if (!arguments.reflected.isEmpty())
-    {
-        return unreflect<PointCircleContainsLogicalFunction>(arguments.reflected);
-    }
     if (arguments.children.size() != 2)
     {
         throw CannotDeserialize("PointCircleContainsLogicalFunction requires exactly two children, but got {}", arguments.children.size());

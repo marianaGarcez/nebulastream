@@ -13,6 +13,7 @@
 */
 
 #pragma once
+#include <Arena.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -55,7 +56,7 @@ public:
         const nautilus::val<uint64_t>& recordIndex,
         const InputFormatIndexer& indexer,
         nautilus::val<RawBufferIndex*> rawBufferIndex,
-        const TupleBufferRef& bufferRef) const override;
+        const TupleBufferRef& bufferRef, ArenaRef& /*arena*/) const override;
 
     [[nodiscard]] TupleDelimiterOffsets getTupleDelimiterOffsets() const override
     {

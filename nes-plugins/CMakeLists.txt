@@ -33,7 +33,7 @@ add_plugin("DataTypes/Reading")
 add_plugin("DataTypes/GeoSpatial")
 
 # MEOS is a dependency
-activate_optional_plugin("MEOS" ON)
+add_plugin("MEOS")
 message(STATUS "Enable MEOS Plugin")
 
 # Detect the platform

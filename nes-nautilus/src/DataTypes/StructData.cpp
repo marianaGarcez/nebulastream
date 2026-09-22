@@ -12,7 +12,7 @@
     limitations under the License.
 */
 
-#include <Nautilus/DataTypes/StructData.hpp>
+#include <DataTypes/StructData.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -22,20 +22,21 @@
 #include <utility>
 #include <vector>
 #include <DataTypes/DataType.hpp>
-#include <Nautilus/DataTypes/DataTypesUtil.hpp>
-#include <Nautilus/DataTypes/FixedSizedData.hpp>
-#include <Nautilus/DataTypes/VarVal.hpp>
+#include <DataTypes/DataTypesUtil.hpp>
+#include <DataTypes/FixedSizedData.hpp>
+#include <DataTypes/VarVal.hpp>
 #include <nautilus/function.hpp>
 #include <nautilus/std/cstring.h>
 #include <nautilus/std/ostream.h>
 #include <nautilus/val.hpp>
 #include <ErrorHandling.hpp>
+#include <static.hpp>
 
 namespace NES
 {
 
-StructData::StructData(const nautilus::val<int8_t*>& reference, std::vector<std::pair<std::string, DataType>> fields)
-    : ptr(reference), fields(std::move(fields))
+StructData::StructData(const nautilus::val<int8_t*>& reference, std::vector<std::pair<std::string, DataType>> fields, FieldLoader loader)
+    : ptr(reference), fields(std::move(fields)), loader(std::move(loader))
 {
 }
 
@@ -51,6 +52,8 @@ const std::vector<std::pair<std::string, DataType>>& StructData::getFields() con
 
 nautilus::val<int8_t*> StructData::getRawPtr() const
 {
+    if (loader)
+        throw NotImplemented("Stored structs with indirect fields require field-wise access, not raw pointer access");
     return ptr;
 }
 
@@ -98,6 +101,10 @@ VarVal StructData::at(const size_t fieldIndex) const
     }
     const auto& fieldType = fields[fieldIndex].second;
     const auto fieldPtr = ptr + nautilus::val<size_t>(offset);
+    if (loader)
+    {
+        return loader(fieldType, fieldPtr);
+    }
     return VarVal::readNonNullableVarValFromMemory(fieldPtr, fieldType);
 }
 
@@ -115,6 +122,8 @@ VarVal StructData::at(const std::string_view fieldName) const
 
 void StructData::writeAt(const size_t fieldIndex, const VarVal& value) const
 {
+    if (loader)
+        throw NotImplemented("Stored struct views are read-only; materialize before modifying fields");
     if (fieldIndex >= fields.size())
     {
         throw OutOfRangeAccess("StructData::writeAt: field index out of range");
@@ -148,8 +157,14 @@ nautilus::val<bool> StructData::operator==(const StructData& rhs) const
     {
         return {false};
     }
-    const auto totalBytes = nautilus::val<uint64_t>(getTotalSizeInBytes());
-    return nautilus::memcmp(ptr, rhs.ptr, totalBytes) == 0;
+    if (!loader && !rhs.loader)
+        return nautilus::memcmp(ptr, rhs.ptr, nautilus::val<uint64_t>{getTotalSizeInBytes()}) == 0;
+    nautilus::val<bool> equal = true;
+    for (nautilus::static_val<size_t> i = 0; i < fields.size(); ++i)
+    {
+        equal = equal && (at(i) == rhs.at(i)).getRawValueAs<nautilus::val<bool>>();
+    }
+    return equal;
 }
 
 nautilus::val<bool> StructData::operator!=(const StructData& rhs) const

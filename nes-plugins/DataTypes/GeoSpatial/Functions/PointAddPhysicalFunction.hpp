@@ -15,8 +15,8 @@ Licensed under the Apache License, Version 2.0 (the "License");
 #pragma once
 #include <DataTypes/DataType.hpp>
 #include <Functions/PhysicalFunction.hpp>
-#include <Nautilus/DataTypes/VarVal.hpp>
-#include <Nautilus/Interface/Record.hpp>
+#include <DataTypes/VarVal.hpp>
+#include <Interface/Record.hpp>
 #include <Arena.hpp>
 
 namespace NES

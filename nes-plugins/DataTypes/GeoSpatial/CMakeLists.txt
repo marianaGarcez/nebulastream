@@ -10,11 +10,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-include(${PROJECT_SOURCE_DIR}/cmake/PluginRegistrationUtil.cmake)
+include(${PROJECT_SOURCE_DIR}/cmake/ExtensionRegistrationUtil.cmake)
 add_subdirectory(Functions)
-add_plugin_as_library(Point DataType nes-data-types-registry point_data_type_plugin PointDataType.cpp)
-add_plugin_as_library(Line DataType nes-data-types-registry line_data_type_plugin LineDataType.cpp)
-add_plugin_as_library(Circle DataType nes-data-types-registry circle_data_type_plugin CircleDataType.cpp)
+add_extension_library(Point DataType nes-data-types-registry point_data_type_plugin PointDataType.cpp)
+add_extension_library(Line DataType nes-data-types-registry line_data_type_plugin LineDataType.cpp)
+add_extension_library(Circle DataType nes-data-types-registry circle_data_type_plugin CircleDataType.cpp)
 
 target_include_directories(point_data_type_plugin
         PUBLIC include

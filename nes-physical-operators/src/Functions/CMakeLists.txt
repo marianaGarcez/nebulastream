@@ -19,8 +19,8 @@ add_source_files(nes-physical-operators
         )
 
 
-add_source_files(nes-physical-operators ConstructStructPhysicalFunction.cpp)
-add_registry_entry(PhysicalFunction ConstructStruct)
+include(${PROJECT_SOURCE_DIR}/cmake/ExtensionRegistrationUtil.cmake)
+add_extension_library(ConstructStruct PhysicalFunction nes-physical-operators-registry construct_struct_physical_function ConstructStructPhysicalFunction.cpp)
 
 add_subdirectory(ArithmeticalFunctions)
 add_subdirectory(ComparisonFunctions)

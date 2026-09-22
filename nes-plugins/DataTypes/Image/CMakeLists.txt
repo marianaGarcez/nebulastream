@@ -10,15 +10,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-include(${PROJECT_SOURCE_DIR}/cmake/PluginRegistrationUtil.cmake)
+include(${PROJECT_SOURCE_DIR}/cmake/ExtensionRegistrationUtil.cmake)
 
 # Two registrations from the same source: each declares its own STRUCT layout
 # and is reachable via `DataTypeProvider::provideDataType(<name>)`.
-add_plugin_as_library(Image DataType nes-data-types-registry image_data_type_plugin ImageDataType.cpp)
-add_plugin_as_library(ThermalFrame DataType nes-data-types-registry thermal_frame_data_type_plugin ImageDataType.cpp)
-add_plugin_as_library(ThermalPixel DataType nes-data-types-registry thermal_pixel_data_type_plugin ImageDataType.cpp)
-add_plugin_as_library(ThermalImage DataType nes-data-types-registry thermal_image_data_type_plugin ImageDataType.cpp)
-add_plugin_as_library(RGBFrame DataType nes-data-types-registry rgb_frame_data_type_plugin ImageDataType.cpp)
+add_extension_library(Image DataType nes-data-types-registry image_data_type_plugin ImageDataType.cpp)
+add_extension_library(ThermalFrame DataType nes-data-types-registry thermal_frame_data_type_plugin ImageDataType.cpp)
+add_extension_library(ThermalPixel DataType nes-data-types-registry thermal_pixel_data_type_plugin ImageDataType.cpp)
+add_extension_library(ThermalImage DataType nes-data-types-registry thermal_image_data_type_plugin ImageDataType.cpp)
+add_extension_library(RGBFrame DataType nes-data-types-registry rgb_frame_data_type_plugin ImageDataType.cpp)
 
 # The Image-domain function plugins (to_celsius, is_fever, to_rgb) live in a
 # sibling subdirectory to keep the DataType-registry plugins above isolated

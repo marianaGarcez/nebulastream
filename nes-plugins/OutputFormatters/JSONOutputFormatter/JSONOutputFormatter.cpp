@@ -43,7 +43,7 @@
 #include <std/cstring.h>
 
 #include <Configurations/Descriptor.hpp>
-#include <Nautilus/DataTypes/VarArrayData.hpp>
+#include <DataTypes/VarArrayData.hpp>
 #include <Runtime/AbstractBufferProvider.hpp>
 #include <Runtime/TupleBuffer.hpp>
 #include <OutputFormatterRegistry.hpp>

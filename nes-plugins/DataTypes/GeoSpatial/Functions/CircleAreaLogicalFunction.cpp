@@ -20,7 +20,8 @@
 #include <vector>
 
 #include <DataTypes/DataType.hpp>
-#include <DataTypes/Schema.hpp>
+#include <Schema/Schema.hpp>
+#include <Schema/Field.hpp>
 #include <Functions/LogicalFunction.hpp>
 #include <Serialization/LogicalFunctionReflection.hpp>
 #include <Util/PlanRenderer.hpp>
@@ -49,7 +50,7 @@ CircleAreaLogicalFunction CircleAreaLogicalFunction::withDataType(const DataType
     return copy;
 }
 
-LogicalFunction CircleAreaLogicalFunction::withInferredDataType(const Schema& schema) const
+LogicalFunction CircleAreaLogicalFunction::withInferredDataType(const Schema<Field, Unordered>& schema) const
 {
     const auto newChildren = getChildren() | std::views::transform([&schema](auto& c) { return c.withInferredDataType(schema); })
         | std::ranges::to<std::vector>();
@@ -107,14 +108,14 @@ std::string CircleAreaLogicalFunction::explain(ExplainVerbosity verbosity) const
     return fmt::format("circle_area({})", child.explain(verbosity));
 }
 
-Reflected Reflector<CircleAreaLogicalFunction>::operator()(const CircleAreaLogicalFunction& function) const
+Reflected Reflector<CircleAreaLogicalFunction>::operator()(const CircleAreaLogicalFunction& function, const ReflectionContext& context) const
 {
-    return reflect(detail::ReflectedCircleAreaLogicalFunction{.child = function.child});
+    return context.reflect(detail::ReflectedCircleAreaLogicalFunction{.child = function.child});
 }
 
-CircleAreaLogicalFunction Unreflector<CircleAreaLogicalFunction>::operator()(const Reflected& reflected) const
+CircleAreaLogicalFunction Unreflector<CircleAreaLogicalFunction>::operator()(const Reflected& reflected, const ReflectionContext& context) const
 {
-    auto [child] = unreflect<detail::ReflectedCircleAreaLogicalFunction>(reflected);
+    auto [child] = context.unreflect<detail::ReflectedCircleAreaLogicalFunction>(reflected);
     if (!child.has_value())
     {
         throw CannotDeserialize("CircleAreaLogicalFunction is missing its child");
@@ -125,10 +126,6 @@ CircleAreaLogicalFunction Unreflector<CircleAreaLogicalFunction>::operator()(con
 LogicalFunctionRegistryReturnType
 LogicalFunctionGeneratedRegistrar::RegisterCIRCLE_AREALogicalFunction(LogicalFunctionRegistryArguments arguments)
 {
-    if (!arguments.reflected.isEmpty())
-    {
-        return unreflect<CircleAreaLogicalFunction>(arguments.reflected);
-    }
     if (arguments.children.size() != 1)
     {
         throw CannotDeserialize("CircleAreaLogicalFunction requires exactly one child, but got {}", arguments.children.size());

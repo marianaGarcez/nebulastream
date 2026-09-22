@@ -19,7 +19,8 @@
 #include <string_view>
 #include <vector>
 #include <DataTypes/DataType.hpp>
-#include <DataTypes/Schema.hpp>
+#include <Schema/Schema.hpp>
+#include <Schema/Field.hpp>
 #include <Functions/LogicalFunction.hpp>
 #include <Util/Logger/Formatter.hpp>
 #include <Util/PlanRenderer.hpp>
@@ -42,7 +43,7 @@ public:
 
     [[nodiscard]] DataType getDataType() const;
     [[nodiscard]] NadTgeoStboxLogicalFunction withDataType(const DataType& dataType) const;
-    [[nodiscard]] LogicalFunction withInferredDataType(const Schema& schema) const;
+    [[nodiscard]] LogicalFunction withInferredDataType(const Schema<Field, Unordered>& schema) const;
 
     [[nodiscard]] std::vector<LogicalFunction> getChildren() const;
     [[nodiscard]] NadTgeoStboxLogicalFunction withChildren(const std::vector<LogicalFunction>& children) const;
@@ -61,13 +62,13 @@ private:
 template <>
 struct Reflector<NadTgeoStboxLogicalFunction>
 {
-    Reflected operator()(const NadTgeoStboxLogicalFunction& function) const;
+    Reflected operator()(const NadTgeoStboxLogicalFunction& function, const ReflectionContext& context) const;
 };
 
 template <>
 struct Unreflector<NadTgeoStboxLogicalFunction>
 {
-    NadTgeoStboxLogicalFunction operator()(const Reflected& reflected) const;
+    NadTgeoStboxLogicalFunction operator()(const Reflected& reflected, const ReflectionContext& context) const;
 };
 
 static_assert(LogicalFunctionConcept<NadTgeoStboxLogicalFunction>);

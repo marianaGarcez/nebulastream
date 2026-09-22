@@ -28,9 +28,10 @@
 
 #include <Configuration/WorkerConfiguration.hpp>
 #include <DataTypes/DataType.hpp>
-#include <DataTypes/Schema.hpp>
-#include <Nautilus/DataTypes/FixedSizedData.hpp>
-#include <Nautilus/DataTypes/VarVal.hpp>
+#include <Schema/Schema.hpp>
+#include <Schema/Field.hpp>
+#include <DataTypes/FixedSizedData.hpp>
+#include <DataTypes/VarVal.hpp>
 #include <Runtime/BufferManager.hpp>
 #include <Runtime/TupleBuffer.hpp>
 #include <Sources/SourceCatalog.hpp>

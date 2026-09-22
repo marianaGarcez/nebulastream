@@ -21,9 +21,9 @@
 #include <utility>
 #include <vector>
 #include <DataTypes/DataType.hpp>
-#include <DataTypes/Schema.hpp>
+#include <Schema/Schema.hpp>
+#include <Schema/Field.hpp>
 #include <Functions/LogicalFunction.hpp>
-#include <Serialization/DataTypeSerializationUtil.hpp>
 #include <Serialization/LogicalFunctionReflection.hpp>
 #include <Util/PlanRenderer.hpp>
 #include <Util/Reflection.hpp>
@@ -57,7 +57,7 @@ ConstructStructLogicalFunction ConstructStructLogicalFunction::withDataType(cons
     return copy;
 }
 
-LogicalFunction ConstructStructLogicalFunction::withInferredDataType(const Schema& schema) const
+LogicalFunction ConstructStructLogicalFunction::withInferredDataType(const Schema<Field, Unordered>& schema) const
 {
     auto newChildren = children | std::views::transform([&schema](const auto& child) { return child.withInferredDataType(schema); })
         | std::ranges::to<std::vector>();
@@ -122,24 +122,20 @@ std::string ConstructStructLogicalFunction::explain(ExplainVerbosity verbosity) 
     return fmt::format("{}({})", structType.structName, fmt::join(childStrings, ", "));
 }
 
-Reflected Reflector<ConstructStructLogicalFunction>::operator()(const ConstructStructLogicalFunction& function) const
+Reflected Reflector<ConstructStructLogicalFunction>::operator()(const ConstructStructLogicalFunction& function, const ReflectionContext& context) const
 {
-    return reflect(detail::ReflectedConstructStructLogicalFunction{.structType = function.getDataType(), .children = function.getChildren()});
+    return context.reflect(detail::ReflectedConstructStructLogicalFunction{.structType = function.getDataType(), .children = function.getChildren()});
 }
 
-ConstructStructLogicalFunction Unreflector<ConstructStructLogicalFunction>::operator()(const Reflected& reflected) const
+ConstructStructLogicalFunction Unreflector<ConstructStructLogicalFunction>::operator()(const Reflected& reflected, const ReflectionContext& context) const
 {
-    auto [structType, children] = unreflect<detail::ReflectedConstructStructLogicalFunction>(reflected);
+    auto [structType, children] = context.unreflect<detail::ReflectedConstructStructLogicalFunction>(reflected);
     return ConstructStructLogicalFunction{std::move(structType), std::move(children)};
 }
 
 LogicalFunctionRegistryReturnType
-LogicalFunctionGeneratedRegistrar::RegisterConstructStructLogicalFunction(LogicalFunctionRegistryArguments arguments)
+LogicalFunctionGeneratedRegistrar::RegisterConstructStructLogicalFunction(LogicalFunctionRegistryArguments /*arguments*/)
 {
-    if (!arguments.reflected.isEmpty())
-    {
-        return unreflect<ConstructStructLogicalFunction>(arguments.reflected);
-    }
     PRECONDITION(false, "ConstructStructLogicalFunction is built directly via parser or via reflection, not the registry");
     std::unreachable();
 }

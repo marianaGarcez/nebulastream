@@ -402,16 +402,27 @@ std::optional<DataType> DataType::join(const DataType& otherDataType) const
     return std::nullopt;
 }
 
+namespace
+{
+struct ReflectedExtensibleDataType
+{
+    DataType::Type type;
+    bool nullable;
+    std::vector<DataType> elementType;
+    uint32_t count;
+    std::string structName;
+    std::vector<std::pair<std::string, DataType>> fields;
+};
+}
+
 Reflected Reflector<DataType>::operator()(const DataType& field, const ReflectionContext& context) const
 {
-    return context.reflect(std::make_tuple(field.type, field.nullable, field.elementType, field.count, field.structName, field.fields));
+    return context.reflect(ReflectedExtensibleDataType{field.type, field.nullable, field.elementType, field.count, field.structName, field.fields});
 }
 
 DataType Unreflector<DataType>::operator()(const Reflected& rfl, const ReflectionContext& context) const
 {
-    using TupleT
-        = std::tuple<DataType::Type, bool, std::vector<DataType>, uint32_t, std::string, std::vector<std::pair<std::string, DataType>>>;
-    const auto [type, nullable, elementType, count, structName, fields] = context.unreflect<TupleT>(rfl);
+    const auto [type, nullable, elementType, count, structName, fields] = context.unreflect<ReflectedExtensibleDataType>(rfl);
     const auto nullableEnum = nullable ? DataType::NULLABLE::IS_NULLABLE : DataType::NULLABLE::NOT_NULLABLE;
     if (type == DataType::Type::FIXEDSIZED || type == DataType::Type::VARARRAY)
     {

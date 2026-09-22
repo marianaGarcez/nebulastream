@@ -17,13 +17,13 @@ CREATE PHYSICAL SOURCE FOR sncb_stream TYPE FILE;
 ATTACH FILE small/input_sncb.csv
 
 # Check if MovingPoint plugin works
-SELECT MovingPoint(lon1, lat1, ts) AS mp FROM temporal WHERE ts == UINT64(1609459200) INTO FILE('JSON' as `SINK`.OUTPUT_FORMAT);
+SELECT MovingPoint(lon1, lat1, ts) AS mp FROM temporal WHERE ts == UINT64(1609459200) INTO FILE('JSON' as "SINK".OUTPUT_FORMAT);
 ----
 {"MP":{"lon":-73.9857,"lat":40.7484,"ts":1609459200}}
 
 
 # Records the distance between the two points in the tuple. They share a timestamp, so they can be compared as TInstants by nearest_approach_distance at any point
-SELECT nearest_approach_distance(MovingPoint(lon1, lat1, ts), MovingPoint(lon2, lat2, ts)) AS distance FROM temporal INTO FILE('JSON' as `SINK`.OUTPUT_FORMAT);
+SELECT nearest_approach_distance(MovingPoint(lon1, lat1, ts), MovingPoint(lon2, lat2, ts)) AS distance FROM temporal INTO FILE('JSON' as "SINK".OUTPUT_FORMAT);
 ----
 {"DISTANCE":0.0}
 {"DISTANCE":7.0}
@@ -33,19 +33,19 @@ SELECT nearest_approach_distance(MovingPoint(lon1, lat1, ts), MovingPoint(lon2, 
 {"DISTANCE":47.0}
 
 # Outcome if we were to treat the points as one trajectory (TSequence)
-SELECT start, end, MIN(nearest_approach_distance(MovingPoint(lon1, lat1, ts), MovingPoint(lon2, lat2, ts))) AS nad FROM temporal WINDOW TUMBLING(ts, size 2000000000 ms) INTO FILE('JSON' as `SINK`.OUTPUT_FORMAT);
+SELECT start, end, MIN(nearest_approach_distance(MovingPoint(lon1, lat1, ts), MovingPoint(lon2, lat2, ts))) AS nad FROM temporal WINDOW TUMBLING(ts, size 2000000000 ms) INTO FILE('JSON' as "SINK".OUTPUT_FORMAT);
 ----
-{"TEMPORAL$START":0,"TEMPORAL$END":2000000000,"NAD":0.0}
+{"START":0,"END":2000000000,"NAD":0.0}
 
 # Outcome if we were to treat the points as multiple trajectory parts
-SELECT start, end, MIN(nearest_approach_distance(MovingPoint(lon1, lat1, ts), MovingPoint(lon2, lat2, ts))) AS nad FROM temporal WINDOW TUMBLING(ts, size 120 ms) INTO FILE('JSON' as `SINK`.OUTPUT_FORMAT);
+SELECT start, end, MIN(nearest_approach_distance(MovingPoint(lon1, lat1, ts), MovingPoint(lon2, lat2, ts))) AS nad FROM temporal WINDOW TUMBLING(ts, size 120 ms) INTO FILE('JSON' as "SINK".OUTPUT_FORMAT);
 ----
-{"TEMPORAL$START":1609459200,"TEMPORAL$END":1609459320,"NAD":0.0}
-{"TEMPORAL$START":1609459320,"TEMPORAL$END":1609459440,"NAD":17.0}
-{"TEMPORAL$START":1609459440,"TEMPORAL$END":1609459560,"NAD":37.0}
+{"START":1609459200,"END":1609459320,"NAD":0.0}
+{"START":1609459320,"END":1609459440,"NAD":17.0}
+{"START":1609459440,"END":1609459560,"NAD":37.0}
 
 # Filters tuples based on whether a moving point falls inside of a spatio-temporal box (SRID=4326;STBOX XT(((4.0,50.0),(4.6,50.8)),[2024-08-01 00:00:00+00, 2025-08-01 00:00:00+00]))
-SELECT * FROM sncb_stream WHERE tgeo_at_stbox(MovingPoint(gps_lon, gps_lat, ts), SpatioTemporalBox(FLOAT64(4.0), FLOAT64(4.6), FLOAT64(50.0), FLOAT64(50.8), UINT64(1722470400), UINT64(1754006400))) INTO FILE('CSV' as `SINK`.OUTPUT_FORMAT);
+SELECT * FROM sncb_stream WHERE tgeo_at_stbox(MovingPoint(gps_lon, gps_lat, ts), SpatioTemporalBox(FLOAT64(4.0), FLOAT64(4.6), FLOAT64(50.0), FLOAT64(50.8), UINT64(1722470400), UINT64(1754006400))) INTO FILE('CSV' as "SINK".OUTPUT_FORMAT);
 ----
 1722520348,3,29.4,4.376,1.451,0.003,1.316,46.18,4.518,0.0,1296.0,1.4671,50.6456,4.3658
 1722520358,3,29.4,4.368,1.455,0.0,1.267,46.25,4.518,0.0,1296.0,0.0315,50.6456,4.3658
@@ -63,16 +63,14 @@ SELECT * FROM sncb_stream WHERE tgeo_at_stbox(MovingPoint(gps_lon, gps_lat, ts),
 
 # As the definition of arrays / vectors in the query itself is currently not possible, we write the polygon in the input data for now
 CREATE LOGICAL SOURCE tInstantPoints(lon FLOAT64 NOT NULL, lat FLOAT64 NOT NULL, ts UINT64 NOT NULL, polygon Polygon NOT NULL);
-CREATE PHYSICAL SOURCE FOR tInstantPoints TYPE File SET('NestedJSON' AS `PARSER`.`TYPE`);
+CREATE PHYSICAL SOURCE FOR tInstantPoints TYPE File SET('NestedJSON' AS INPUT_FORMATTER."TYPE");
 ATTACH INLINE
 {"LON": 2.5, "LAT": 2.5, "TS": 100, "POLYGON": {"vertices": [{"x": 0, "y": 0}, {"x": 5, "y": 0}, {"x": 5, "y": 5}, {"x": 0, "y": 5}, {"x": 0, "y": 0}]}}
 {"LON": 3.0, "LAT": 5.1, "TS": 110, "POLYGON": {"vertices": [{"x": 0, "y": 0}, {"x": 5, "y": 0}, {"x": 5, "y": 5}, {"x": 0, "y": 5}, {"x": 0, "y": 0}]}}
 {"LON": 6.0, "LAT": 2.5, "TS": 120, "POLYGON": {"vertices": [{"x": 0, "y": 0}, {"x": 5, "y": 0}, {"x": 5, "y": 5}, {"x": 0, "y": 5}, {"x": 0, "y": 0}]}}
 {"LON": 0.0, "LAT": 0.0, "TS": 130, "POLYGON": {"vertices": [{"x": 0, "y": 0}, {"x": 5, "y": 0}, {"x": 5, "y": 5}, {"x": 0, "y": 5}, {"x": 0, "y": 0}]}}
 
-SELECT lon, lat, ts FROM tInstantPoints WHERE temporal_eintersects_geometry(MovingPoint(lon, lat, ts), polygon) INTO FILE('CSV' as `SINK`.OUTPUT_FORMAT);
+SELECT lon, lat, ts FROM tInstantPoints WHERE temporal_eintersects_geometry(MovingPoint(lon, lat, ts), polygon) INTO FILE('CSV' as "SINK".OUTPUT_FORMAT);
 ----
 2.5,2.5,100
 0.0,0.0,130
-
-

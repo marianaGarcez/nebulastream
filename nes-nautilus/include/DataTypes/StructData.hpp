@@ -16,6 +16,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -47,7 +48,8 @@ class VarVal;
 class StructData
 {
 public:
-    StructData(const nautilus::val<int8_t*>& reference, std::vector<std::pair<std::string, DataType>> fields);
+    using FieldLoader = std::function<VarVal(const DataType&, const nautilus::val<int8_t*>&)>;
+    StructData(const nautilus::val<int8_t*>& reference, std::vector<std::pair<std::string, DataType>> fields, FieldLoader loader = {});
     StructData(const StructData& other) = default;
     StructData(StructData&& other) noexcept = default;
     StructData& operator=(const StructData& other) = default;
@@ -81,9 +83,8 @@ public:
     [[nodiscard]] nautilus::val<int8_t*> getRawPtr() const;
     [[nodiscard]] const std::vector<std::pair<std::string, DataType>>& getFields() const;
 
-    /// Two StructData are equal iff their field layouts are identical
-    /// (names + types, in order) and the underlying bytes match
-    /// (memcmp over getTotalSizeInBytes()).
+    /// Two StructData are equal iff their field layouts and field values match.
+    /// Stored references are resolved before comparing values.
     nautilus::val<bool> operator==(const StructData& rhs) const;
     nautilus::val<bool> operator!=(const StructData& rhs) const;
 
@@ -97,6 +98,8 @@ private:
 
     nautilus::val<int8_t*> ptr;
     std::vector<std::pair<std::string, DataType>> fields;
+    /// Resolve stored child-buffer references without modifying the source buffer.
+    FieldLoader loader;
 };
 
 }

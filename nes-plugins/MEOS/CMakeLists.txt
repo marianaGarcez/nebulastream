@@ -45,4 +45,3 @@ endif()
 target_link_libraries(nes-meos PUBLIC nes-common nes-data-types)
 
 # Add to build_all_plugins target
-add_dependencies(build_all_plugins nes-meos)

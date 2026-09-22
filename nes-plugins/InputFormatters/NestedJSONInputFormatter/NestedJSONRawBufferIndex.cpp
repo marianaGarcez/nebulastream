@@ -17,29 +17,42 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <optional>
+#include <ranges>
+#include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 #include <simdjson.h>
 
-#include <Nautilus/Interface/Record.hpp>
+#include <DataTypes/DataType.hpp>
+#include <DataTypes/DataTypesUtil.hpp>
+#include <DataTypes/VarVal.hpp>
+#include <DataTypes/VariableSizedData.hpp>
+#include <Identifiers/QualifiedIdentifier.hpp>
+#include <Interface/BufferRef/TupleBufferRef.hpp>
+#include <Interface/Record.hpp>
+#include <Arena.hpp>
 #include <ErrorHandling.hpp>
 #include <InputFormatIndexer.hpp>
-#include <JsonValueParser.hpp>
-#include <NestedJSONInputFormatIndexer.hpp>
 #include <RawBufferIndex.hpp>
 #include <RawTupleBuffer.hpp>
+#include <NestedJSONInputFormatIndexer.hpp>
+#include <JsonValueParser.hpp>
 #include <function.hpp>
 #include <static.hpp>
 #include <val.hpp>
+#include <val_arith.hpp>
+#include <val_bool.hpp>
 #include <val_ptr.hpp>
+#include <common/FunctionAttributes.hpp>
 
 namespace NES
 {
-
 namespace
 {
 
@@ -84,6 +97,7 @@ using NestedParser = JsonValueParser::JsonRecordParser<NestedJsonTraits>;
 
 }
 
+
 NestedJSONRawBufferIndex::NestedJSONRawBufferIndex()
 {
     INVARIANT(
@@ -104,36 +118,48 @@ Record NestedJSONRawBufferIndex::readSpanningRecord(
     const nautilus::val<uint64_t>&,
     const InputFormatIndexer& indexer,
     nautilus::val<RawBufferIndex*> rawBufferIndex,
-    const TupleBufferRef& bufferRef,
-    ArenaRef& arena) const
+    const TupleBufferRef& bufferRef, ArenaRef& arena) const
 {
     Record record;
-    const auto numberOfFields = nautilus::static_val{bufferRef.getAllDataTypes().size()};
-    const nautilus::val<const InputFormatIndexer*> indexerVal{&indexer};
-
+    const auto numberOfFields = bufferRef.getAllDataTypes().size();
     for (nautilus::static_val<uint64_t> i = 0; i < numberOfFields; ++i)
     {
         const auto fieldName = bufferRef.getAllFieldNames().at(i);
+
         if (std::ranges::find(projections, fieldName) == projections.end())
         {
             continue;
         }
-        const auto fieldDataType = bufferRef.getAllDataTypes().at(i);
-        auto fieldIndex = static_cast<nautilus::val<FieldIndex>>(i);
-        NestedParser::writeValueToRecord(fieldDataType, record, fieldName, fieldIndex, rawBufferIndex, indexerVal, arena);
-    }
 
+        auto fieldIndex = static_cast<nautilus::val<FieldIndex>>(i);
+        const auto fieldDataType = bufferRef.getAllDataTypes().at(i);
+        NestedParser::writeValueToRecord(
+            fieldDataType, record, fieldName, fieldIndex, rawBufferIndex, nautilus::val<const InputFormatIndexer*>(&indexer), arena);
+    }
+    /// Increment iterator and return record
     nautilus::invoke(
-        +[](RawBufferIndex* bi)
+        +[](RawBufferIndex* rawBufferIndexPtr)
         {
-            auto* nestedJsonBI = dynamic_cast<NestedJSONRawBufferIndex*>(bi);
-            ++nestedJsonBI->docStreamIterator;
-            nestedJsonBI->isAtLastTuple = nestedJsonBI->docStreamIterator.at_end();
+            PRECONDITION(
+                dynamic_cast<NestedJSONRawBufferIndex*>(rawBufferIndexPtr) != nullptr, "rawBufferIndex must be a NestedJSONRawBufferIndex");
+            /// NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast): type verified by PRECONDITION above.
+            auto* simdJsonBufferIndex = static_cast<NestedJSONRawBufferIndex*>(rawBufferIndexPtr);
+            auto& activeIterator
+                = simdJsonBufferIndex->useExtraJSON ? simdJsonBufferIndex->extraDocStreamIterator : simdJsonBufferIndex->docStreamIterator;
+            ++activeIterator;
+            if (not simdJsonBufferIndex->useExtraJSON and activeIterator.at_end() and simdJsonBufferIndex->hasExtraJSON)
+            {
+                simdJsonBufferIndex->useExtraJSON = true;
+                simdJsonBufferIndex->isAtLastTuple = simdJsonBufferIndex->extraDocStreamIterator.at_end();
+                return;
+            }
+            simdJsonBufferIndex->isAtLastTuple = activeIterator.at_end();
         },
         rawBufferIndex);
     return record;
 }
 
+/// Marks the buffer as containing no tuple delimiters by setting both offsets to `max()`.
 void NestedJSONRawBufferIndex::markNoTupleDelimiters()
 {
     this->offsetOfFirstTuple = std::numeric_limits<FieldIndex>::max();
@@ -154,16 +180,36 @@ std::pair<bool, FieldIndex> NestedJSONRawBufferIndex::indexJSON(const std::strin
 std::pair<bool, FieldIndex> NestedJSONRawBufferIndex::indexJSON(const std::string_view jsonSV, size_t batchSize)
 {
     const simdjson::padded_string_view paddedJSONSV{jsonSV.data(), jsonSV.size(), jsonSV.size() + simdjson::SIMDJSON_PADDING};
+    this->varSizedValues.clear();
     this->parser = std::make_shared<simdjson::ondemand::parser>();
     this->parser->threaded = false;
     if (jsonSV.size() > batchSize)
     {
-        throw CannotFormatSourceData("Size of raw buffer: {} exceeds SIMDJSONs configured batch_size: {}", jsonSV.size(), batchSize);
+        throw CannotFormatSourceData("Size of raw buffer: {} exceeds NestedJSONs configured batch_size: {}", jsonSV.size(), batchSize);
     }
     docStream = std::make_shared<simdjson::ondemand::document_stream>(parser->iterate_many(paddedJSONSV, batchSize));
     docStreamIterator = docStream->begin();
     isAtLastTuple = docStreamIterator == docStream->end();
     return {docStreamIterator.at_end(), docStream->truncated_bytes()};
+}
+
+void NestedJSONRawBufferIndex::indexExtraJSON(const std::string_view jsonSV, const size_t batchSize)
+{
+    if (jsonSV.size() > batchSize)
+    {
+        throw CannotFormatSourceData("Size of raw buffer: {} exceeds NestedJSONs configured batch_size: {}", jsonSV.size(), batchSize);
+    }
+    extraJSON = simdjson::padded_string(jsonSV);
+    extraParser = std::make_shared<simdjson::ondemand::parser>();
+    extraParser->threaded = false;
+    extraDocStream = std::make_shared<simdjson::ondemand::document_stream>(extraParser->iterate_many(extraJSON, batchSize));
+    extraDocStreamIterator = extraDocStream->begin();
+    hasExtraJSON = not extraDocStreamIterator.at_end();
+    if (isAtLastTuple and hasExtraJSON)
+    {
+        useExtraJSON = true;
+        isAtLastTuple = false;
+    }
 }
 
 }

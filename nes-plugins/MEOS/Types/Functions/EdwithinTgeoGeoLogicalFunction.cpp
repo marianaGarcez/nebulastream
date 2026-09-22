@@ -20,7 +20,8 @@
 #include <vector>
 
 #include <DataTypes/DataType.hpp>
-#include <DataTypes/Schema.hpp>
+#include <Schema/Schema.hpp>
+#include <Schema/Field.hpp>
 #include <Functions/LogicalFunction.hpp>
 #include <Serialization/LogicalFunctionReflection.hpp>
 #include <Util/PlanRenderer.hpp>
@@ -53,7 +54,7 @@ EdwithinTgeoGeoLogicalFunction EdwithinTgeoGeoLogicalFunction::withDataType(cons
     return copy;
 }
 
-LogicalFunction EdwithinTgeoGeoLogicalFunction::withInferredDataType(const Schema& schema) const
+LogicalFunction EdwithinTgeoGeoLogicalFunction::withInferredDataType(const Schema<Field, Unordered>& schema) const
 {
     const auto newChildren = getChildren() | std::views::transform([&schema](auto& c) { return c.withInferredDataType(schema); })
         | std::ranges::to<std::vector>();
@@ -115,15 +116,15 @@ std::string EdwithinTgeoGeoLogicalFunction::explain(ExplainVerbosity verbosity) 
         "edwithin_tgeo_geo({}, {}, {})", leftChild.explain(verbosity), middleChild.explain(verbosity), rightChild.explain(verbosity));
 }
 
-Reflected Reflector<EdwithinTgeoGeoLogicalFunction>::operator()(const EdwithinTgeoGeoLogicalFunction& function) const
+Reflected Reflector<EdwithinTgeoGeoLogicalFunction>::operator()(const EdwithinTgeoGeoLogicalFunction& function, const ReflectionContext& context) const
 {
-    return reflect(detail::ReflectedEdwithinTgeoGeoLogicalFunction{
+    return context.reflect(detail::ReflectedEdwithinTgeoGeoLogicalFunction{
         .left = function.leftChild, .middle = function.middleChild, .right = function.rightChild});
 }
 
-EdwithinTgeoGeoLogicalFunction Unreflector<EdwithinTgeoGeoLogicalFunction>::operator()(const Reflected& reflected) const
+EdwithinTgeoGeoLogicalFunction Unreflector<EdwithinTgeoGeoLogicalFunction>::operator()(const Reflected& reflected, const ReflectionContext& context) const
 {
-    auto [left, middle, right] = unreflect<detail::ReflectedEdwithinTgeoGeoLogicalFunction>(reflected);
+    auto [left, middle, right] = context.unreflect<detail::ReflectedEdwithinTgeoGeoLogicalFunction>(reflected);
     if (!left.has_value() || !middle.has_value() || !right.has_value())
     {
         throw CannotDeserialize("EdwithinTgeoGeoLogicalFunction is missing a child");
@@ -134,10 +135,6 @@ EdwithinTgeoGeoLogicalFunction Unreflector<EdwithinTgeoGeoLogicalFunction>::oper
 LogicalFunctionRegistryReturnType
 LogicalFunctionGeneratedRegistrar::RegisterEDWITHIN_TGEO_GEOLogicalFunction(LogicalFunctionRegistryArguments arguments)
 {
-    if (!arguments.reflected.isEmpty())
-    {
-        return unreflect<EdwithinTgeoGeoLogicalFunction>(arguments.reflected);
-    }
     if (arguments.children.size() != 3)
     {
         throw CannotDeserialize("EdwithinTgeoGeoLogicalFunction requires exactly three children, but got {}", arguments.children.size());

@@ -12,6 +12,8 @@
 
 
 add_subdirectory(TestUtils)
+add_nes_unit_test(composite-record-layout-unit-tests "UnitTests/CompositeRecordLayoutTest.cpp")
+target_link_libraries(composite-record-layout-unit-tests nes-nautilus-test-util)
 
 add_nes_unit_test(paged-vector-unit-tests "UnitTests/PagedVectorTest.cpp")
 target_link_libraries(paged-vector-unit-tests nes-nautilus-test-util)

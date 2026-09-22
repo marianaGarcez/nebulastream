@@ -21,7 +21,8 @@
 #include <vector>
 
 #include <DataTypes/DataType.hpp>
-#include <DataTypes/Schema.hpp>
+#include <Schema/Schema.hpp>
+#include <Schema/Field.hpp>
 #include <Functions/LogicalFunction.hpp>
 #include <Serialization/LogicalFunctionReflection.hpp>
 #include <Util/PlanRenderer.hpp>
@@ -66,7 +67,7 @@ ToRGBLogicalFunction ToRGBLogicalFunction::withDataType(const DataType& dataType
     return copy;
 }
 
-LogicalFunction ToRGBLogicalFunction::withInferredDataType(const Schema& schema) const
+LogicalFunction ToRGBLogicalFunction::withInferredDataType(const Schema<Field, Unordered>& schema) const
 {
     const auto newChildren = getChildren() | std::views::transform([&schema](auto& c) { return c.withInferredDataType(schema); })
         | std::ranges::to<std::vector>();
@@ -131,14 +132,14 @@ std::string ToRGBLogicalFunction::explain(ExplainVerbosity verbosity) const
     return fmt::format("to_rgb({}, {})", frame.explain(verbosity), colormap.explain(verbosity));
 }
 
-Reflected Reflector<ToRGBLogicalFunction>::operator()(const ToRGBLogicalFunction& function) const
+Reflected Reflector<ToRGBLogicalFunction>::operator()(const ToRGBLogicalFunction& function, const ReflectionContext& context) const
 {
-    return reflect(detail::ReflectedToRGBLogicalFunction{.frame = function.frame, .colormap = function.colormap});
+    return context.reflect(detail::ReflectedToRGBLogicalFunction{.frame = function.frame, .colormap = function.colormap});
 }
 
-ToRGBLogicalFunction Unreflector<ToRGBLogicalFunction>::operator()(const Reflected& reflected) const
+ToRGBLogicalFunction Unreflector<ToRGBLogicalFunction>::operator()(const Reflected& reflected, const ReflectionContext& context) const
 {
-    auto [frame, colormap] = unreflect<detail::ReflectedToRGBLogicalFunction>(reflected);
+    auto [frame, colormap] = context.unreflect<detail::ReflectedToRGBLogicalFunction>(reflected);
     if (!frame.has_value() || !colormap.has_value())
     {
         throw CannotDeserialize("ToRGBLogicalFunction is missing one of its children");
@@ -149,10 +150,6 @@ ToRGBLogicalFunction Unreflector<ToRGBLogicalFunction>::operator()(const Reflect
 LogicalFunctionRegistryReturnType
 LogicalFunctionGeneratedRegistrar::RegisterTO_RGBLogicalFunction(LogicalFunctionRegistryArguments arguments)
 {
-    if (!arguments.reflected.isEmpty())
-    {
-        return unreflect<ToRGBLogicalFunction>(arguments.reflected);
-    }
     if (arguments.children.size() != 2)
     {
         throw CannotDeserialize("ToRGBLogicalFunction requires exactly two children, but got {}", arguments.children.size());

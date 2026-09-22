@@ -20,7 +20,8 @@
 #include <vector>
 
 #include <DataTypes/DataType.hpp>
-#include <DataTypes/Schema.hpp>
+#include <Schema/Schema.hpp>
+#include <Schema/Field.hpp>
 #include <Functions/LogicalFunction.hpp>
 #include <Serialization/LogicalFunctionReflection.hpp>
 #include <Util/PlanRenderer.hpp>
@@ -49,7 +50,7 @@ CircleCircumferenceLogicalFunction CircleCircumferenceLogicalFunction::withDataT
     return copy;
 }
 
-LogicalFunction CircleCircumferenceLogicalFunction::withInferredDataType(const Schema& schema) const
+LogicalFunction CircleCircumferenceLogicalFunction::withInferredDataType(const Schema<Field, Unordered>& schema) const
 {
     const auto newChildren = getChildren() | std::views::transform([&schema](auto& c) { return c.withInferredDataType(schema); })
         | std::ranges::to<std::vector>();
@@ -107,14 +108,14 @@ std::string CircleCircumferenceLogicalFunction::explain(ExplainVerbosity verbosi
     return fmt::format("circle_circumference({})", child.explain(verbosity));
 }
 
-Reflected Reflector<CircleCircumferenceLogicalFunction>::operator()(const CircleCircumferenceLogicalFunction& function) const
+Reflected Reflector<CircleCircumferenceLogicalFunction>::operator()(const CircleCircumferenceLogicalFunction& function, const ReflectionContext& context) const
 {
-    return reflect(detail::ReflectedCircleCircumferenceLogicalFunction{.child = function.child});
+    return context.reflect(detail::ReflectedCircleCircumferenceLogicalFunction{.child = function.child});
 }
 
-CircleCircumferenceLogicalFunction Unreflector<CircleCircumferenceLogicalFunction>::operator()(const Reflected& reflected) const
+CircleCircumferenceLogicalFunction Unreflector<CircleCircumferenceLogicalFunction>::operator()(const Reflected& reflected, const ReflectionContext& context) const
 {
-    auto [child] = unreflect<detail::ReflectedCircleCircumferenceLogicalFunction>(reflected);
+    auto [child] = context.unreflect<detail::ReflectedCircleCircumferenceLogicalFunction>(reflected);
     if (!child.has_value())
     {
         throw CannotDeserialize("CircleCircumferenceLogicalFunction is missing its child");
@@ -125,10 +126,6 @@ CircleCircumferenceLogicalFunction Unreflector<CircleCircumferenceLogicalFunctio
 LogicalFunctionRegistryReturnType
 LogicalFunctionGeneratedRegistrar::RegisterCIRCLE_CIRCUMFERENCELogicalFunction(LogicalFunctionRegistryArguments arguments)
 {
-    if (!arguments.reflected.isEmpty())
-    {
-        return unreflect<CircleCircumferenceLogicalFunction>(arguments.reflected);
-    }
     if (arguments.children.size() != 1)
     {
         throw CannotDeserialize("CircleCircumferenceLogicalFunction requires exactly one child, but got {}", arguments.children.size());

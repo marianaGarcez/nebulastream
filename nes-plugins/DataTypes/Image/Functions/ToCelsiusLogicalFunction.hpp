@@ -19,7 +19,8 @@
 #include <string_view>
 #include <vector>
 #include <DataTypes/DataType.hpp>
-#include <DataTypes/Schema.hpp>
+#include <Schema/Schema.hpp>
+#include <Schema/Field.hpp>
 #include <Functions/LogicalFunction.hpp>
 #include <Util/Logger/Formatter.hpp>
 #include <Util/PlanRenderer.hpp>
@@ -41,7 +42,7 @@ public:
 
     [[nodiscard]] DataType getDataType() const;
     [[nodiscard]] ToCelsiusLogicalFunction withDataType(const DataType& dataType) const;
-    [[nodiscard]] LogicalFunction withInferredDataType(const Schema& schema) const;
+    [[nodiscard]] LogicalFunction withInferredDataType(const Schema<Field, Unordered>& schema) const;
 
     [[nodiscard]] std::vector<LogicalFunction> getChildren() const;
     [[nodiscard]] ToCelsiusLogicalFunction withChildren(const std::vector<LogicalFunction>& children) const;
@@ -59,13 +60,13 @@ private:
 template <>
 struct Reflector<ToCelsiusLogicalFunction>
 {
-    Reflected operator()(const ToCelsiusLogicalFunction& function) const;
+    Reflected operator()(const ToCelsiusLogicalFunction& function, const ReflectionContext& context) const;
 };
 
 template <>
 struct Unreflector<ToCelsiusLogicalFunction>
 {
-    ToCelsiusLogicalFunction operator()(const Reflected& reflected) const;
+    ToCelsiusLogicalFunction operator()(const Reflected& reflected, const ReflectionContext& context) const;
 };
 
 static_assert(LogicalFunctionConcept<ToCelsiusLogicalFunction>);

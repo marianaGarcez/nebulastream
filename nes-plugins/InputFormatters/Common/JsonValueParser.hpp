@@ -26,13 +26,13 @@
 
 #include <simdjson.h>
 #include <DataTypes/DataType.hpp>
-#include <Nautilus/DataTypes/DataTypesUtil.hpp>
-#include <Nautilus/DataTypes/FixedSizedData.hpp>
-#include <Nautilus/DataTypes/StructData.hpp>
-#include <Nautilus/DataTypes/VarArrayData.hpp>
-#include <Nautilus/DataTypes/VarVal.hpp>
-#include <Nautilus/DataTypes/VariableSizedData.hpp>
-#include <Nautilus/Interface/Record.hpp>
+#include <DataTypes/DataTypesUtil.hpp>
+#include <DataTypes/FixedSizedData.hpp>
+#include <DataTypes/StructData.hpp>
+#include <DataTypes/VarArrayData.hpp>
+#include <DataTypes/VarVal.hpp>
+#include <DataTypes/VariableSizedData.hpp>
+#include <Interface/Record.hpp>
 #include <magic_enum/magic_enum.hpp>
 #include <Arena.hpp>
 #include <ErrorHandling.hpp>
@@ -708,7 +708,7 @@ struct JsonRecordParser
     static void writeValueToRecord(
         const DataType& dataType,
         Record& record,
-        const std::string& fieldName,
+        const Record::RecordFieldIdentifier& fieldName,
         const nautilus::val<FieldIndex>& fieldIndex,
         const nautilus::val<RawBufferIndex*>& rawBufferIndex,
         const nautilus::val<const InputFormatIndexer*>& indexer,

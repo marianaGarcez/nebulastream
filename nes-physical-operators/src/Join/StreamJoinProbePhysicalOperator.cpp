@@ -77,6 +77,11 @@ VarVal makeNullVarVal(const DataType& dataType)
             return {nautilus::val<char>{0}, true, nullFlag};
         case DataType::Type::VARSIZED:
             return {VariableSizedData(nautilus::val<int8_t*>{nullptr}, nautilus::val<uint64_t>{0}), true, nullFlag};
+        case DataType::Type::FIXEDSIZED:
+        case DataType::Type::STRUCT:
+        case DataType::Type::VARARRAY:
+            throw UnknownDataType(
+                "Outer-join null filling is not yet supported for composite type {}", magic_enum::enum_name(dataType.type));
         case DataType::Type::UNDEFINED:
             throw UnknownDataType("Cannot null-fill field of type {}", magic_enum::enum_name(dataType.type));
     }

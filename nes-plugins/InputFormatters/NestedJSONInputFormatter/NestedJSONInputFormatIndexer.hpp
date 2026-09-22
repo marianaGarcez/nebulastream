@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <string_view>
@@ -24,21 +24,51 @@
 #include <utility>
 #include <vector>
 
+#include <ranges>
+
 #include <Configurations/Descriptor.hpp>
 #include <DataTypes/DataType.hpp>
-#include <DataTypes/Schema.hpp>
-#include <Nautilus/Interface/BufferRef/TupleBufferRef.hpp>
-#include <Nautilus/Interface/Record.hpp>
+#include <Identifiers/Identifier.hpp>
+#include <Interface/BufferRef/TupleBufferRef.hpp>
+#include <Interface/Record.hpp>
 #include <Sources/SourceDescriptor.hpp>
+#include <Util/Strings.hpp>
 #include <ErrorHandling.hpp>
 #include <InputFormatIndexer.hpp>
+#include <InputFormatterDescriptor.hpp>
 #include <RawBufferIndex.hpp>
-#include <RawTupleBuffer.hpp>
+#include <RawValueParser.hpp>
 #include <static.hpp>
 
 namespace NES
 {
+struct ConfigParametersNestedJSON
+{
+    static inline const DescriptorConfig::ConfigParameter<char> TUPLE_DELIMITER{
+        "TUPLE_DELIMITER",
+        '\n',
+        [](const std::unordered_map<std::string, std::string>& config) -> std::optional<char>
+        {
+            const auto it = config.find("TUPLE_DELIMITER");
+            if (it == config.end())
+            {
+                return '\n';
+            }
+            const auto unescaped = unescapeSpecialCharacters(it->second);
+            return (unescaped.size() == 1) ? std::optional<char>{unescaped.front()} : std::nullopt;
+        }};
 
+    static inline const std::unordered_map<std::string, DescriptorConfig::ConfigParameterContainer> parameterMap
+        = DescriptorConfig::createConfigParameterContainerMap(InputFormatterDescriptor::parameterMap, TUPLE_DELIMITER);
+};
+
+/// Parses JSON-encoded tuples (one JSON object per tuple delimiter, '\n' by default) using
+/// NestedJSON's ondemand parser. Nested JSON objects are accessed by encoding the path in the
+/// (quoted) schema field name with '/' as separator, e.g. "MILK/CYCLES/LEFT" reads
+/// {"MILK": {"CYCLES": {"LEFT": ...}}}. Unquoted identifiers are uppercased, so JSON keys must be
+/// uppercase to match; use quoted identifiers for case-sensitive keys. For nullable fields, a
+/// missing field, a missing parent object, or an explicit JSON null all map to NULL; for NOT NULL
+/// fields, a missing field/parent raises FieldNotFound. JSON arrays are not supported.
 class NestedJSONInputFormatIndexer final : public InputFormatIndexer
 {
     /// Passkey idiom (to enforce checks before calling the constructor)
@@ -48,6 +78,7 @@ class NestedJSONInputFormatIndexer final : public InputFormatIndexer
     };
 
 public:
+    static constexpr std::string_view NAME = "NestedJSON";
     static constexpr char DELIMITER_SIZE = sizeof(char);
     static constexpr char TUPLE_DELIMITER = '\n';
     static constexpr char KEY_VALUE_DELIMITER = ':';
@@ -56,73 +87,69 @@ public:
     explicit NestedJSONInputFormatIndexer(
         Private,
         const char tupleDelimiter,
-        std::vector<Record::RecordFieldIdentifier> fieldNamesInJson,
+        std::vector<std::string> jsonPointersToFields,
         std::vector<Record::RecordFieldIdentifier> fieldNamesOutput,
         std::vector<DataType> fieldDataTypes)
         : tupleDelimiter(tupleDelimiter)
-        , fieldNamesInJson(std::move(fieldNamesInJson))
+        , jsonPointersToFields(std::move(jsonPointersToFields))
         , fieldNamesOutput(std::move(fieldNamesOutput))
         , fieldDataTypes(std::move(fieldDataTypes))
-        , nullValues({""})
+        , nullValues({})
     {
     }
 
     /// Delegate constructor that applies preconditions before safely calling the constructor
-    static std::unique_ptr<NestedJSONInputFormatIndexer> create(const ParserConfig& config, const TupleBufferRef& tupleBufferRef)
+    static std::unique_ptr<NestedJSONInputFormatIndexer> create(const InputFormatterDescriptor& config, const TupleBufferRef& tupleBufferRef)
     {
-        PRECONDITION(
-            config.tupleDelimiter.size() == 1,
-            "Delimiters must be of size '1 byte', but the tuple delimiter was {} (size {})",
-            config.tupleDelimiter,
-            config.tupleDelimiter.size());
-
-        /// We expect the names in the json file to not be source qualified.
-        /// The remaining (unqualified) field name encodes the JSON path; '/' separates nesting levels (e.g. "user/name").
-        std::vector<Record::RecordFieldIdentifier> fieldNamesInJson;
+        /// JSON keys are unqualified — take the trailing identifier of each (possibly source-qualified) name.
+        /// Precompute each field's JSON Pointer (RFC 6901) once: prepend '/' and escape literal '~' as
+        /// '~0'. A '/' in a (quoted) field name deliberately stays unescaped — it separates nesting levels.
+        std::vector<std::string> jsonPointersToFields;
         for (const auto& fieldName : tupleBufferRef.getAllFieldNames())
         {
-            if (const auto& qualifierPosition = fieldName.find(Schema::ATTRIBUTE_NAME_SEPARATOR); qualifierPosition != std::string::npos)
-            {
-                fieldNamesInJson.emplace_back(fieldName.substr(qualifierPosition + 1));
-            }
-            else
-            {
-                fieldNamesInJson.emplace_back(fieldName);
-            }
+            jsonPointersToFields.emplace_back("/" + replaceAll(std::ranges::rbegin(fieldName)->asCanonicalString(), "~", "~0"));
         }
 
         auto fieldNamesOutput = tupleBufferRef.getAllFieldNames();
         auto fieldDataTypes = tupleBufferRef.getAllDataTypes();
-        PRECONDITION(fieldNamesInJson.size() == fieldDataTypes.size(), "No. fields must be equal to no. data types");
+        PRECONDITION(jsonPointersToFields.size() == fieldDataTypes.size(), "No. fields must be equal to no. data types");
         PRECONDITION(fieldNamesOutput.size() == fieldDataTypes.size(), "No. fields must be equal to no. data types");
 
         return std::make_unique<NestedJSONInputFormatIndexer>(
-            Private{}, config.tupleDelimiter.front(), std::move(fieldNamesInJson), std::move(fieldNamesOutput), std::move(fieldDataTypes));
+            Private{},
+            config.getFromConfig(ConfigParametersNestedJSON::TUPLE_DELIMITER),
+            std::move(jsonPointersToFields),
+            std::move(fieldNamesOutput),
+            std::move(fieldDataTypes));
     }
 
     ~NestedJSONInputFormatIndexer() override = default;
 
-    [[nodiscard]] std::unique_ptr<RawBufferIndex> indexRawBuffer(const RawTupleBuffer& rawBuffer) const override;
+    [[nodiscard]] std::unique_ptr<RawBufferIndex> indexRawBuffer(std::string_view rawBuffer) const override;
 
     [[nodiscard]] std::string_view getTupleDelimitingBytes() const override { return {&tupleDelimiter, 1}; }
 
     [[nodiscard]] std::string_view getFieldDelimitingBytes() const override { return ""; }
 
+    [[nodiscard]] QuotationType getQuotationType() const override { return QuotationType::DOUBLE_QUOTE; }
+
     [[nodiscard]] const std::vector<std::string>& getNullValues() const override { return nullValues; }
 
-    friend std::ostream& operator<<(std::ostream& os, const NestedJSONInputFormatIndexer& nestedJsonInputFormatIndexer);
+    static DescriptorConfig::Config validateAndFormat(std::unordered_map<std::string, std::string> config);
 
-    [[nodiscard]] const Record::RecordFieldIdentifier& getFieldNameAt(const nautilus::static_val<uint64_t>& i) const
+    [[nodiscard]] const Record::RecordFieldIdentifier& getFieldNameAt(uint64_t fieldIndex) const { return fieldNamesOutput[fieldIndex]; }
+
+    [[nodiscard]] std::string_view getJsonPointerAt(const nautilus::static_val<uint64_t>& fieldIndex) const
     {
-        return fieldNamesOutput[i];
+        return jsonPointersToFields[fieldIndex];
     }
 
-    [[nodiscard]] const Record::RecordFieldIdentifier& getFieldNameInJsonAt(const nautilus::static_val<uint64_t>& i) const
+    [[nodiscard]] std::string getFieldNameInJsonAt(uint64_t index) const
     {
-        return fieldNamesInJson[i];
+        return std::ranges::rbegin(fieldNamesOutput.at(index))->asCanonicalString();
     }
 
-    [[nodiscard]] const DataType& getFieldDataTypeAt(const nautilus::static_val<uint64_t>& i) const { return fieldDataTypes[i]; }
+    [[nodiscard]] const DataType& getFieldDataTypeAt(uint64_t fieldIndex) const { return fieldDataTypes[fieldIndex]; }
 
     [[nodiscard]] uint64_t getNumberOfFields() const
     {
@@ -130,17 +157,14 @@ public:
         return fieldNamesOutput.size();
     }
 
+protected:
+    [[nodiscard]] std::ostream& toString(std::ostream& str) const override;
+
 private:
     char tupleDelimiter;
-    std::vector<Record::RecordFieldIdentifier> fieldNamesInJson{};
-    std::vector<Record::RecordFieldIdentifier> fieldNamesOutput{};
-    std::vector<DataType> fieldDataTypes{};
+    std::vector<std::string> jsonPointersToFields;
+    std::vector<Record::RecordFieldIdentifier> fieldNamesOutput;
+    std::vector<DataType> fieldDataTypes;
     std::vector<std::string> nullValues;
-};
-
-struct ConfigParametersNestedJSON
-{
-    static inline const std::unordered_map<std::string, DescriptorConfig::ConfigParameterContainer> parameterMap
-        = DescriptorConfig::createConfigParameterContainerMap();
 };
 }

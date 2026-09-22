@@ -20,7 +20,8 @@
 #include <vector>
 
 #include <DataTypes/DataType.hpp>
-#include <DataTypes/Schema.hpp>
+#include <Schema/Schema.hpp>
+#include <Schema/Field.hpp>
 #include <Functions/LogicalFunction.hpp>
 #include <Serialization/LogicalFunctionReflection.hpp>
 #include <Util/PlanRenderer.hpp>
@@ -49,7 +50,7 @@ TgeoAtStboxLogicalFunction TgeoAtStboxLogicalFunction::withDataType(const DataTy
     return copy;
 }
 
-LogicalFunction TgeoAtStboxLogicalFunction::withInferredDataType(const Schema& schema) const
+LogicalFunction TgeoAtStboxLogicalFunction::withInferredDataType(const Schema<Field, Unordered>& schema) const
 {
     const auto newChildren = getChildren() | std::views::transform([&schema](auto& c) { return c.withInferredDataType(schema); })
         | std::ranges::to<std::vector>();
@@ -111,14 +112,14 @@ std::string TgeoAtStboxLogicalFunction::explain(ExplainVerbosity verbosity) cons
     return fmt::format("tego_at_stbox({}, {})", leftChild.explain(verbosity), rightChild.explain(verbosity));
 }
 
-Reflected Reflector<TgeoAtStboxLogicalFunction>::operator()(const TgeoAtStboxLogicalFunction& function) const
+Reflected Reflector<TgeoAtStboxLogicalFunction>::operator()(const TgeoAtStboxLogicalFunction& function, const ReflectionContext& context) const
 {
-    return reflect(detail::ReflectedTgeoAtStboxLogicalFunction{.left = function.leftChild, .right = function.rightChild});
+    return context.reflect(detail::ReflectedTgeoAtStboxLogicalFunction{.left = function.leftChild, .right = function.rightChild});
 }
 
-TgeoAtStboxLogicalFunction Unreflector<TgeoAtStboxLogicalFunction>::operator()(const Reflected& reflected) const
+TgeoAtStboxLogicalFunction Unreflector<TgeoAtStboxLogicalFunction>::operator()(const Reflected& reflected, const ReflectionContext& context) const
 {
-    auto [left, right] = unreflect<detail::ReflectedTgeoAtStboxLogicalFunction>(reflected);
+    auto [left, right] = context.unreflect<detail::ReflectedTgeoAtStboxLogicalFunction>(reflected);
     if (!left.has_value() || !right.has_value())
     {
         throw CannotDeserialize("TgeoAtStboxLogicalFunction is missing its child");
@@ -129,10 +130,6 @@ TgeoAtStboxLogicalFunction Unreflector<TgeoAtStboxLogicalFunction>::operator()(c
 LogicalFunctionRegistryReturnType
 LogicalFunctionGeneratedRegistrar::RegisterTGEO_AT_STBOXLogicalFunction(LogicalFunctionRegistryArguments arguments)
 {
-    if (!arguments.reflected.isEmpty())
-    {
-        return unreflect<TgeoAtStboxLogicalFunction>(arguments.reflected);
-    }
     if (arguments.children.size() != 2)
     {
         throw CannotDeserialize(

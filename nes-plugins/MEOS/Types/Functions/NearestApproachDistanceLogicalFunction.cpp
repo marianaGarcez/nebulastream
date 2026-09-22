@@ -20,7 +20,8 @@
 #include <vector>
 
 #include <DataTypes/DataType.hpp>
-#include <DataTypes/Schema.hpp>
+#include <Schema/Schema.hpp>
+#include <Schema/Field.hpp>
 #include <Functions/LogicalFunction.hpp>
 #include <Serialization/LogicalFunctionReflection.hpp>
 #include <Util/PlanRenderer.hpp>
@@ -50,7 +51,7 @@ NearestApproachDistanceLogicalFunction NearestApproachDistanceLogicalFunction::w
     return copy;
 }
 
-LogicalFunction NearestApproachDistanceLogicalFunction::withInferredDataType(const Schema& schema) const
+LogicalFunction NearestApproachDistanceLogicalFunction::withInferredDataType(const Schema<Field, Unordered>& schema) const
 {
     const auto newChildren = getChildren() | std::views::transform([&schema](auto& c) { return c.withInferredDataType(schema); })
         | std::ranges::to<std::vector>();
@@ -99,14 +100,14 @@ std::string NearestApproachDistanceLogicalFunction::explain(ExplainVerbosity ver
     return fmt::format("nearest_approach_distance({}, {})", leftChild.explain(verbosity), rightChild.explain(verbosity));
 }
 
-Reflected Reflector<NearestApproachDistanceLogicalFunction>::operator()(const NearestApproachDistanceLogicalFunction& function) const
+Reflected Reflector<NearestApproachDistanceLogicalFunction>::operator()(const NearestApproachDistanceLogicalFunction& function, const ReflectionContext& context) const
 {
-    return reflect(detail::ReflectedNearestApproachDistanceLogicalFunction{.left = function.leftChild, .right = function.rightChild});
+    return context.reflect(detail::ReflectedNearestApproachDistanceLogicalFunction{.left = function.leftChild, .right = function.rightChild});
 }
 
-NearestApproachDistanceLogicalFunction Unreflector<NearestApproachDistanceLogicalFunction>::operator()(const Reflected& reflected) const
+NearestApproachDistanceLogicalFunction Unreflector<NearestApproachDistanceLogicalFunction>::operator()(const Reflected& reflected, const ReflectionContext& context) const
 {
-    auto [left, right] = unreflect<detail::ReflectedNearestApproachDistanceLogicalFunction>(reflected);
+    auto [left, right] = context.unreflect<detail::ReflectedNearestApproachDistanceLogicalFunction>(reflected);
     if (!left.has_value() || !right.has_value())
     {
         throw CannotDeserialize("NearestApproachDistanceLogicalFunction is missing its child");
@@ -117,10 +118,6 @@ NearestApproachDistanceLogicalFunction Unreflector<NearestApproachDistanceLogica
 LogicalFunctionRegistryReturnType
 LogicalFunctionGeneratedRegistrar::RegisterNEAREST_APPROACH_DISTANCELogicalFunction(LogicalFunctionRegistryArguments arguments)
 {
-    if (!arguments.reflected.isEmpty())
-    {
-        return unreflect<NearestApproachDistanceLogicalFunction>(arguments.reflected);
-    }
     if (arguments.children.size() != 2)
     {
         throw CannotDeserialize("NearestApproachDistanceLogicalFunction requires exactly two children, but got {}", arguments.children.size());

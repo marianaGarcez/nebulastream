@@ -58,15 +58,16 @@ std::expected<UnqualifiedUnboundField, std::string> parseField(const std::string
         return std::unexpected(fmt::format("field '{}' has an unknown nullability '{}'", field, parts.at(2)));
     }
 
-    const auto type = magic_enum::enum_cast<DataType::Type>(parts.at(1));
-    if (not type and toLowerCase(parts.at(1)) != "varsized")
+    const auto typeName = toLowerCase(parts.at(1)) == "varsized" ? std::string{"VARSIZED"} : std::string{parts.at(1)};
+    const auto type = DataTypeProvider::tryProvideDataType(typeName, *nullable);
+    if (not type)
     {
         return std::unexpected(fmt::format("field '{}' has an unknown type '{}'", field, parts.at(1)));
     }
 
     /// Case sensitive field names will arrive quoted here and therefore remain case sensitive. Case insensitive field names will be canonicalized into upper-case for comparison, so they are not quoted here.
     return UnqualifiedUnboundField{
-        Identifier::parse(std::string(parts.at(0))), DataTypeProvider::provideDataType(type.value_or(DataType::Type::VARSIZED), *nullable)};
+        Identifier::parse(std::string(parts.at(0))), *type};
 }
 
 /// One header line: comma separated fields. The first field that does not parse is the reason the header is rejected.

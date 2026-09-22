@@ -20,7 +20,8 @@
 #include <vector>
 
 #include <DataTypes/DataType.hpp>
-#include <DataTypes/Schema.hpp>
+#include <Schema/Schema.hpp>
+#include <Schema/Field.hpp>
 #include <Functions/LogicalFunction.hpp>
 #include <Serialization/LogicalFunctionReflection.hpp>
 #include <Util/PlanRenderer.hpp>
@@ -49,7 +50,7 @@ PointLineContainsLogicalFunction PointLineContainsLogicalFunction::withDataType(
     return copy;
 }
 
-LogicalFunction PointLineContainsLogicalFunction::withInferredDataType(const Schema& schema) const
+LogicalFunction PointLineContainsLogicalFunction::withInferredDataType(const Schema<Field, Unordered>& schema) const
 {
     const auto newChildren = getChildren() | std::views::transform([&schema](auto& c) { return c.withInferredDataType(schema); })
         | std::ranges::to<std::vector>();
@@ -109,14 +110,14 @@ std::string PointLineContainsLogicalFunction::explain(ExplainVerbosity verbosity
     return fmt::format("point_line_contains({}, {})", leftChild.explain(verbosity), rightChild.explain(verbosity));
 }
 
-Reflected Reflector<PointLineContainsLogicalFunction>::operator()(const PointLineContainsLogicalFunction& function) const
+Reflected Reflector<PointLineContainsLogicalFunction>::operator()(const PointLineContainsLogicalFunction& function, const ReflectionContext& context) const
 {
-    return reflect(detail::ReflectedPointLineContainsLogicalFunction{.left = function.leftChild, .right = function.rightChild});
+    return context.reflect(detail::ReflectedPointLineContainsLogicalFunction{.left = function.leftChild, .right = function.rightChild});
 }
 
-PointLineContainsLogicalFunction Unreflector<PointLineContainsLogicalFunction>::operator()(const Reflected& reflected) const
+PointLineContainsLogicalFunction Unreflector<PointLineContainsLogicalFunction>::operator()(const Reflected& reflected, const ReflectionContext& context) const
 {
-    auto [left, right] = unreflect<detail::ReflectedPointLineContainsLogicalFunction>(reflected);
+    auto [left, right] = context.unreflect<detail::ReflectedPointLineContainsLogicalFunction>(reflected);
     if (!left.has_value() || !right.has_value())
     {
         throw CannotDeserialize("PointLineContainsLogicalFunction is missing its child");
@@ -127,10 +128,6 @@ PointLineContainsLogicalFunction Unreflector<PointLineContainsLogicalFunction>::
 LogicalFunctionRegistryReturnType
 LogicalFunctionGeneratedRegistrar::RegisterPOINT_LINE_CONTAINSLogicalFunction(LogicalFunctionRegistryArguments arguments)
 {
-    if (!arguments.reflected.isEmpty())
-    {
-        return unreflect<PointLineContainsLogicalFunction>(arguments.reflected);
-    }
     if (arguments.children.size() != 2)
     {
         throw CannotDeserialize("PointLineContainsLogicalFunction requires exactly two children, but got {}", arguments.children.size());

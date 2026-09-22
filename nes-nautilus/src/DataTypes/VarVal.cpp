@@ -12,6 +12,7 @@
     limitations under the License.
 */
 #include <DataTypes/VarVal.hpp>
+#include <static.hpp>
 
 #include <concepts>
 #include <cstdint>
@@ -91,8 +92,13 @@ void VarVal::writeToMemory(const nautilus::val<int8_t*>& memRef) const
             }
             else if constexpr (std::is_same_v<ValType, StructData>)
             {
-                /// All elements are written bytealigned into memory
-                nautilus::memcpy(memRef, val.getRawPtr(), nautilus::val<size_t>{val.getTotalSizeInBytes()});
+                /// Materialize field-wise so stored child-buffer references become in-memory pointers.
+                size_t offset = 0;
+                for (nautilus::static_val<size_t> i = 0; i < val.getNumFields(); ++i)
+                {
+                    val.at(i).writeToMemory(memRef + nautilus::val<size_t>{offset});
+                    offset += val.getFields()[i].second.getSizeInBytesWithoutNull();
+                }
             }
             else
             {
