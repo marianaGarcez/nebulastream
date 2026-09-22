@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Berlin mobility twin — live refresh</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>body{font:16px system-ui;margin:20px}#map{height:70vh}p{max-width:1000px}</style>
+<h1>Berlin mobility twin — live refresh</h1>
+<p>Positions are straight-line estimates between stops.
+Red means the next arrival is predicted more than three minutes late; gray means delay is unknown.
+Colors and region membership come from NebulaStream query results.
+The dashed blue rectangle is the spatial region used by the NES query.
+Positions themselves are estimated.</p>
+<p id="status">No snapshot loaded.</p>
+<div id="map"></div>
+<p>Data: VBB, CC BY 4.0. Estimated positions derived from stop-time predictions.</p>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const map = L.map('map').setView([52.52, 13.405], 12);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
+}).addTo(map);
+let layer, region, fitted = false;
+async function display(load) {
+  const status = document.getElementById('status');
+  if (layer) { map.removeLayer(layer); layer = null; }
+  if (region) { map.removeLayer(region); region = null; }
+  try {
+    const data = await load();
+    if (!data.metadata.query_result_counts) throw new Error('Missing NebulaStream results');
+    // Same west/east/south/north values used to construct the query's SpatioTemporalBox.
+    const [west, east, south, north] = data.metadata.bbox;
+    region = L.rectangle([[south, west], [north, east]], {
+      color: '#2463eb', weight: 2, dashArray: '8 6', fillOpacity: 0.04
+    }).addTo(map).bindTooltip('NES query region');
+    region.bringToBack();
+    layer = L.geoJSON(data, {
+      pointToLayer: (feature, latlng) => L.circleMarker(latlng, {
+        radius: 8, color: feature.properties.delay_s == null ? '#666' :
+          feature.properties.nes_late ? '#c62828' : '#16734b',
+        fillOpacity: 0.8, weight: feature.properties.nes_in_region ? 5 : 2
+      }),
+      onEachFeature: (feature, marker) => {
+        const p = feature.properties, popup = document.createElement('div');
+        popup.textContent = `${p.line} → ${p.next_stop} | delay: ${p.delay_s == null ? 'unknown' : p.delay_s + ' s'} | update age at snapshot: ${p.update_age_s} s | ESTIMATED`;
+        if ('nes_in_region' in p) popup.textContent += ` | NES region: ${p.nes_in_region ? 'inside' : 'outside'} | NES late + region: ${p.nes_late_in_region}`;
+        marker.bindPopup(popup);
+      }
+    }).addTo(map);
+    if (!fitted) {
+      const bounds = region.getBounds();
+      if (layer.getBounds().isValid()) bounds.extend(layer.getBounds());
+      map.fitBounds(bounds, {padding: [20, 20]}); fitted = true;
+    }
+    const age = Math.round(Date.now() / 1000 - data.metadata.feed_timestamp);
+    status.textContent = `${age > 300 || age < -60 ? 'STALE / CLOCK MISMATCH' : 'AUTO-REFRESH'}: ${new Date(data.metadata.feed_timestamp * 1000).toISOString()} — ${data.features.length} estimated positions; feed age ${age} s. Incomplete coverage.`;
+    if (data.metadata.query_result_counts) {
+      const c = data.metadata.query_result_counts;
+      const outside = data.features.length - c.nes_in_region;
+      status.textContent += ` | NebulaStream: ${c.nes_late} late, ${c.nes_in_region} in region (thick outline), ${outside} outside region, ${c.nes_late_in_region} late and in region.`;
+    }
+  } catch (error) { status.textContent = `Cannot load snapshot: ${error.message}`; }
+}
+  async function poll() {
+    await display(async () => {
+      const response = await fetch('/latest.geojson', {cache: 'no-store'});
+      if (!response.ok) throw new Error('Refresh unavailable; no current positions shown');
+      return response.json();
+    });
+    setTimeout(poll, 30000);
+  }
+  poll();
+</script>
+</html>

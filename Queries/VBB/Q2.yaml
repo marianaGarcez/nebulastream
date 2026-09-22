@@ -1,0 +1,47 @@
+# NES deployment format, matching Queries/Q1.yaml.
+# Deploy with a running worker: nes-cli -t Queries/VBB/Q2.yaml start
+query: |
+  SELECT id FROM vbb
+  WHERE tgeo_at_stbox(MovingPoint(lon, lat, ts), SpatioTemporalBox(FLOAT64(13.375), FLOAT64(13.43), FLOAT64(52.485), FLOAT64(52.54), UINT64(0), UINT64(4102444800)))
+  INTO VBB_Q2_SINK
+
+sinks:
+  - name: VBB_Q2_SINK
+    host: localhost:8080
+    type: File
+    schema:
+      - name: ID
+        type: UINT64
+    config:
+      file_path: "Output/vbb/q2.csv"
+      output_format: "CSV"
+      append: "false"
+
+logical:
+  - name: vbb
+    schema:
+      - name: id
+        type: UINT64
+      - name: ts
+        type: UINT64
+      - name: lon
+        type: FLOAT64
+      - name: lat
+        type: FLOAT64
+      - name: delay_s
+        type: INT64
+        nullable: true
+
+physical:
+  - logical: vbb
+    host: localhost:8080
+    type: File
+    parser_config:
+      type: JSON
+    source_config:
+      file_path: "Output/vbb/input/positions.jsonl"
+
+workers:
+  - host: localhost:8080
+    data_address: localhost:9090
+    max_operators: 10000
