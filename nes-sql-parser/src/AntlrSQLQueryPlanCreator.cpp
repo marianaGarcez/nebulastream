@@ -59,6 +59,7 @@
 #include <Identifiers/Identifier.hpp>
 #include <Iterators/BFSIterator.hpp>
 #include <Operators/ProjectionLogicalOperator.hpp>
+#include <Operators/LatestByKeyLogicalOperator.hpp>
 #include <Operators/Windows/Aggregations/AvgAggregationLogicalFunction.hpp>
 #include <Operators/Windows/Aggregations/CountAggregationLogicalFunction.hpp>
 #include <Operators/Windows/Aggregations/MaxAggregationLogicalFunction.hpp>
@@ -543,6 +544,23 @@ void AntlrSQLQueryPlanCreator::exitNamedSource(AntlrSQLParser::NamedSourceContex
     AntlrSQLBaseListener::exitNamedSource(context);
 }
 
+void AntlrSQLQueryPlanCreator::enterLatestByClause(AntlrSQLParser::LatestByClauseContext*)
+{
+    helpers.top().isWhereOrHaving = true;
+}
+
+void AntlrSQLQueryPlanCreator::exitLatestByClause(AntlrSQLParser::LatestByClauseContext*)
+{
+    auto& helper = helpers.top();
+    helper.isWhereOrHaving = false;
+    if (helper.functionBuilder.size() != 2)
+    {
+        throw InvalidQuerySyntax("LATEST BY requires a key and VERSION BY expression");
+    }
+    helper.latestBy = std::move(helper.functionBuilder);
+    helper.functionBuilder.clear();
+}
+
 void AntlrSQLQueryPlanCreator::enterWhereClause(AntlrSQLParser::WhereClauseContext* context)
 {
     helpers.top().isWhereOrHaving = true;
@@ -822,6 +840,12 @@ void AntlrSQLQueryPlanCreator::exitPrimaryQuery(AntlrSQLParser::PrimaryQueryCont
         }
         return LogicalPlanBuilder::createLogicalPlan(helpers.top().getSource().value());
     }();
+
+    if (!helpers.top().latestBy.empty())
+    {
+        auto op = LatestByKeyLogicalOperator::create(helpers.top().latestBy[0], helpers.top().latestBy[1]);
+        queryPlan = queryPlan.withRootOperators({op.withChildrenUnsafe(queryPlan.getRootOperators())});
+    }
 
     for (auto whereExpr = helpers.top().getWhereClauses().rbegin(); whereExpr != helpers.top().getWhereClauses().rend(); ++whereExpr)
     {

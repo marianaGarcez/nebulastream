@@ -1,0 +1,40 @@
+# name: LatestByKey.test
+# description: Keyed version acceptance and predicate-pushdown barrier
+# groups: [LatestByKey]
+
+CREATE LOGICAL SOURCE revisions(id UINT64 NOT NULL, revision UINT64 NOT NULL, delay_s INT64 NOT NULL);
+CREATE PHYSICAL SOURCE FOR revisions TYPE File;
+ATTACH INLINE
+1,100,300
+2,50,240
+1,101,60
+1,100,300
+1,101,500
+2,51,0
+2,49,400
+1,102,0
+
+# Accepted revisions, not a final snapshot: equal versions are first-wins.
+SELECT id, revision, delay_s FROM revisions LATEST BY id VERSION BY revision INTO File('CSV' AS "SINK".OUTPUT_FORMAT);
+----
+1,100,300
+2,50,240
+1,101,60
+2,51,0
+1,102,0
+
+# If the optimizer pushed the filter below LatestByKey, version 101 / delay 500
+# would incorrectly pass after the on-time revision had been filtered out.
+SELECT id, revision FROM revisions LATEST BY id VERSION BY revision WHERE delay_s > INT64(180) INTO File('CSV' AS "SINK".OUTPUT_FORMAT);
+----
+1,100
+2,50
+
+# Projection must not remove the key/version before state maintenance.
+SELECT delay_s FROM revisions LATEST BY id VERSION BY revision INTO File('CSV' AS "SINK".OUTPUT_FORMAT);
+----
+300
+240
+60
+0
+0

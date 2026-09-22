@@ -27,6 +27,9 @@
 #include <utility>
 #include <vector>
 #include <sys/select.h>
+#include <poll.h>
+#include <algorithm>
+#include <stdexcept>
 
 #include <cstdio>
 #include <fcntl.h>
@@ -202,72 +205,54 @@ void TCPSource::open(std::shared_ptr<AbstractBufferProvider>)
     NES_TRACE("TCPSource::open: Connected to server.");
 }
 
-Source::FillTupleBufferResult TCPSource::fillTupleBuffer(TupleBuffer& tupleBuffer, const std::stop_token&)
+Source::FillTupleBufferResult TCPSource::fillTupleBuffer(TupleBuffer& tupleBuffer, const std::stop_token& stopToken)
 {
-    try
+    size_t received = 0;
+    const auto capacity = tupleBuffer.getBufferSize();
+    auto firstByteAt = std::chrono::steady_clock::now();
+    while (!stopToken.stop_requested() && received < capacity)
     {
-        size_t numReceivedBytes = 0;
-        while (fillBuffer(tupleBuffer, numReceivedBytes))
+        int timeoutMs = 100; // Bound cancellation latency even on an idle connection.
+        if (received > 0 && flushIntervalInMs > 0)
         {
-            /// Fill the buffer until EoS reached or the number of tuples in the buffer is not equals to 0.
-        };
-        if (numReceivedBytes == 0)
-        {
-            return FillTupleBufferResult::eos();
-        }
-        return FillTupleBufferResult::withBytes(numReceivedBytes);
-    }
-    catch (const std::exception& e)
-    {
-        NES_ERROR("Failed to fill the TupleBuffer. Error: {}.", e.what());
-        throw;
-    }
-}
-
-bool TCPSource::fillBuffer(TupleBuffer& tupleBuffer, size_t& numReceivedBytes)
-{
-    const auto flushIntervalTimerStart = std::chrono::system_clock::now();
-    bool flushIntervalPassed = false;
-    bool readWasValid = true;
-
-    const size_t rawTBSize = tupleBuffer.getBufferSize();
-    while (not flushIntervalPassed and numReceivedBytes < rawTBSize)
-    {
-        const ssize_t bufferSizeReceived
-            = read(sockfd, tupleBuffer.getAvailableMemoryArea().data() + numReceivedBytes, rawTBSize - numReceivedBytes);
-        numReceivedBytes += bufferSizeReceived;
-        if (bufferSizeReceived == INVALID_RECEIVED_BUFFER_SIZE)
-        {
-            /// if read method returned -1 an error occurred during read.
-            NES_ERROR("An error occurred while reading from socket. Error: {}", strerror(errno));
-            readWasValid = false;
-            numReceivedBytes = 0;
-            break;
-        }
-        if (bufferSizeReceived == EOF_RECEIVED_BUFFER_SIZE)
-        {
-            NES_TRACE("No data received from {}:{}.", socketHost, socketPort);
-            if (numReceivedBytes == 0)
+            const auto elapsed = std::chrono::duration<float, std::milli>(
+                std::chrono::steady_clock::now() - firstByteAt).count();
+            if (elapsed >= flushIntervalInMs)
             {
-                NES_INFO("TCP Source detected EoS");
-                readWasValid = false;
                 break;
             }
+            timeoutMs = std::max(1, static_cast<int>(std::min(100.0F, flushIntervalInMs - elapsed)));
         }
-        /// If bufferFlushIntervalMs was defined by the user (> 0), we check whether the time on receiving
-        /// and writing data exceeds the user defined limit (bufferFlushIntervalMs).
-        /// If so, we flush the current TupleBuffer(TB) and proceed with the next TB.
-        if ((flushIntervalInMs > 0
-             && std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - flushIntervalTimerStart).count()
-                 >= flushIntervalInMs))
+        pollfd descriptor{.fd = sockfd, .events = POLLIN, .revents = 0};
+        const auto ready = poll(&descriptor, 1, timeoutMs);
+        if (ready == 0 || (ready < 0 && errno == EINTR))
         {
-            NES_DEBUG("Reached TupleBuffer flush interval. Finishing writing to current TupleBuffer.");
-            flushIntervalPassed = true;
+            continue;
         }
+        if (ready < 0 || (descriptor.revents & POLLNVAL))
+        {
+            throw std::runtime_error("TCP source failed while waiting for input");
+        }
+        const auto bytes = recv(sockfd, tupleBuffer.getAvailableMemoryArea().data() + received, capacity - received, MSG_DONTWAIT);
+        if (bytes == 0)
+        {
+            break; // EOF: emit any final partial buffer first.
+        }
+        if (bytes < 0)
+        {
+            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
+            {
+                continue;
+            }
+            throw std::runtime_error("TCP source failed while receiving input");
+        }
+        if (received == 0)
+        {
+            firstByteAt = std::chrono::steady_clock::now();
+        }
+        received += static_cast<size_t>(bytes);
     }
-    ++generatedBuffers;
-    /// Loop while we haven't received any bytes yet and we can still read from the socket.
-    return numReceivedBytes == 0 and readWasValid;
+    return received == 0 ? FillTupleBufferResult::eos() : FillTupleBufferResult::withBytes(received);
 }
 
 DescriptorConfig::Config TCPSource::validateAndFormat(std::unordered_map<std::string, std::string> config)

@@ -45,6 +45,19 @@ class SnapshotTests(unittest.TestCase):
     def test_cancelled(self):
         self.update.trip.schedule_relationship = pb.TripDescriptor.CANCELED
         self.assertEqual(self.result()[0], [])
+        states = []
+        snapshot(self.feed, self.tables, {'M41'}, 300, states)
+        self.assertEqual(states[0]['status'], 'cancelled')
+
+    def test_id_survives_other_trips_being_added(self):
+        identifier = self.result()[0][0]['ID']
+        added = self.feed.entity.add(id='earlier').trip_update
+        added.CopyFrom(self.update)
+        added.trip.trip_id = 'a-trip'
+        self.tables[2]['a-trip'] = 'route'
+        rows, details, _ = self.result()
+        actual = next(d['id'] for d in details if d['trip_id'] == 'trip')
+        self.assertEqual(actual, identifier)
 
     def test_skipped(self):
         self.update.stop_time_update[1].schedule_relationship = pb.TripUpdate.StopTimeUpdate.SKIPPED

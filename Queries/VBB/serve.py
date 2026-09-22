@@ -5,28 +5,37 @@ import subprocess
 import sys
 import tempfile
 import time
+from contextlib import contextmanager, nullcontext
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.request import Request, urlopen
+from threading import Event, Thread
 import yaml
+from trip_state import reconcile
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 
 
-def deploy_queries(stage):
-    """Deploy NES YAML unchanged except per-snapshot input/output paths."""
-    container_stage = Path('/workspace') / stage.resolve().relative_to(ROOT)
-    def command(args):
-        result = subprocess.run(args, capture_output=True, text=True, timeout=60)
-        if result.returncode:
-            raise RuntimeError((result.stdout + result.stderr)[-3000:])
-        return result.stdout.strip()
+def command(args):
+    result = subprocess.run(args, capture_output=True, text=True, timeout=60)
+    if result.returncode:
+        raise RuntimeError((result.stdout + result.stderr)[-3000:])
+    return result.stdout.strip()
+
+
+@contextmanager
+def worker(existing=None, single_thread=False):
+    """Own one worker for the server lifetime, or borrow an existing one."""
+    if existing is not None:
+        yield existing
+        return
     container = command(['docker', 'run', '-d', '--rm', '--entrypoint',
                '/workspace/build-main-meos/nes-single-node-worker/nes-single-node-worker',
                '-v', f'{ROOT}:/workspace', '-w', '/workspace',
                'nebulastream/nes-development:mobility-twin-main-meos',
-               '--', '--grpc=0.0.0.0:8080', '--data_address=localhost:9090'])
+               '--', '--grpc=0.0.0.0:8080', '--data_address=localhost:9090']
+               + (['--worker.query_engine.number_of_worker_threads=1'] if single_thread else []))
     try:
         # Wait for worker readiness, without retrying query submissions.
         for attempt in range(40):
@@ -38,6 +47,16 @@ def deploy_queries(stage):
             time.sleep(0.25)
         else:
             raise RuntimeError('NES worker did not become ready')
+        print(f'NES worker ready: {container[:12]}', flush=True)
+        yield container
+    finally:
+        command(['docker', 'stop', '--timeout', '2', container])
+
+
+def deploy_queries(stage, container=None):
+    """Deploy NES YAML unchanged except per-snapshot input/output paths."""
+    container_stage = Path('/workspace') / stage.resolve().relative_to(ROOT)
+    with worker(container) as container:
         for number in (1, 2, 3):
             config = yaml.safe_load((HERE / f'Q{number}.yaml').read_text())
             config['physical'][0]['source_config']['file_path'] = str(container_stage / 'positions.jsonl')
@@ -57,13 +76,12 @@ def deploy_queries(stage):
                 time.sleep(0.25)
             else:
                 raise TimeoutError(f'NES query {query_id} did not finish')
-    finally:
-        command(['docker', 'stop', '--time', '2', container])
 
 
-def run_queries(stage):
+def run_queries(stage, container=None):
     """Read CSV sinks and attach their classifications to map features."""
-    deploy_queries(stage)
+    started = time.monotonic()
+    deploy_queries(stage, container)
     data = json.loads((stage / 'positions.geojson').read_text())
     data['metadata']['bbox'] = json.loads((HERE / 'map-region.json').read_text())['bbox']
     known = {f['properties']['id'] for f in data['features']}
@@ -82,10 +100,13 @@ def run_queries(stage):
             feature['properties'][key] = feature['properties']['id'] in selected
     data['metadata']['query_engine'] = 'NebulaStream (periodic snapshot queries)'
     data['metadata']['query_result_counts'] = counts
+    data['metadata']['query_cycle_ms'] = round((time.monotonic() - started) * 1000, 2)
+    data['metadata']['worker_id'] = container
     (stage / 'positions.geojson').write_text(json.dumps(data, ensure_ascii=False))
 
 
-def refresh(static, output):
+def refresh(static, output, container=None, pipeline=None):
+    started = time.monotonic()
     output.mkdir(parents=True, exist_ok=True)
     # Publish only a complete, successfully prepared snapshot, on the same filesystem.
     with tempfile.TemporaryDirectory(dir=output) as directory:
@@ -99,39 +120,63 @@ def refresh(static, output):
                         '--static', str(static), '--realtime', str(stage / 'realtime.pb'),
                         '--headers', str(stage / 'realtime.headers'), '--output', str(stage)],
                        check=True, timeout=60, stdout=subprocess.DEVNULL)
-        run_queries(stage)
+        if pipeline is None:
+            run_queries(stage, container)
+        else:
+            pipeline.run(stage)
+        data = json.loads((stage / 'positions.geojson').read_text())
+        cycle_ms = data['metadata']['query_cycle_ms']
+        input_rows = data['metadata'].get('native_input_rows', len(data['features']))
+        latest = output / 'latest.geojson'
+        if pipeline is None:
+            previous = json.loads(latest.read_text()) if latest.exists() else {}
+            data = reconcile(previous, data, json.loads((stage / 'trips.json').read_text()), time.time())
+        (stage / 'positions.geojson').write_text(json.dumps(data, ensure_ascii=False))
+        print(f"Trip states: {data['metadata'].get('state_counts', {})}", flush=True)
+        metrics = {'recorded_at': time.time(), 'feed_timestamp': data['metadata']['feed_timestamp'],
+                   'worker_id': container, 'input_rows': input_rows,
+                   'query_cycle_ms': cycle_ms,
+                   'refresh_ms': round((time.monotonic() - started) * 1000, 2),
+                   'counts': data['metadata']['query_result_counts']}
+        with (output / 'evaluation.jsonl').open('a') as stream:
+            stream.write(json.dumps(metrics) + '\n')
+        print(f'NES evaluation: {json.dumps(metrics)}', flush=True)
         (stage / 'positions.geojson').replace(output / 'latest.geojson')
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=8000)
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument('--continuous', dest='continuous', action='store_true',
+                      help='Default: deploy QLatest.yaml once; maintain versions inside NES over TCP')
+    mode.add_argument('--snapshot', dest='continuous', action='store_false',
+                      help='Comparison mode: rerun Q1-Q3 per snapshot with Python reconciliation')
+    parser.set_defaults(continuous=True)
     parser.add_argument('--static', type=Path, default=ROOT / 'Output/vbb/static.zip')
+    parser.add_argument('--output', type=Path, default=ROOT / 'Output/vbb/live')
     args = parser.parse_args()
     if not args.static.is_file():
         parser.error('Static GTFS ZIP is missing')
-    output = ROOT / 'Output/vbb/live'
+    output = args.output.resolve()
+    if not output.is_relative_to(ROOT / 'Output/vbb'):
+        parser.error('--output must be within Output/vbb for the Docker mount')
 
     class Handler(BaseHTTPRequestHandler):
-        last_attempt = float('-inf')
-        error = None
+        error = 'Waiting for first update'
 
         def do_GET(self):
             if self.path in ('/', '/map.html'):
                 payload, mime = (HERE / 'map.html').read_bytes(), 'text/html; charset=utf-8'
             elif self.path == '/latest.geojson':
-                if time.monotonic() - Handler.last_attempt >= 30:
-                    Handler.last_attempt = time.monotonic()
-                    try:
-                        refresh(args.static, output)
-                        Handler.error = None
-                    except Exception as error:
-                        Handler.error = str(error)
-                        print(f'Refresh failed: {error}', flush=True)
                 if Handler.error or not (output / 'latest.geojson').exists():
                     self.send_error(503, 'Refresh failed; retained snapshot is not current')
                     return
                 payload = (output / 'latest.geojson').read_bytes()
+                at = json.loads(payload)['metadata']['feed_timestamp']
+                if not -60 <= time.time() - at <= 300:
+                    self.send_error(503, 'Feed is stale; no current positions available')
+                    return
                 mime = 'application/geo+json'
             else:
                 self.send_error(404)
@@ -143,10 +188,29 @@ def main():
             self.end_headers()
             self.wfile.write(payload)
 
-    print(f'Open http://127.0.0.1:{args.port} — refresh while map is open; Ctrl+C stops.', flush=True)
+    stop = Event()
+    def update_loop():
+        while not stop.is_set():
+            try:
+                refresh(args.static, output, container, pipeline)
+                Handler.error = None
+            except Exception as error:
+                Handler.error = str(error)
+                print(f'Refresh failed: {error}', flush=True)
+            stop.wait(30)
+
+    print(f'Open http://127.0.0.1:{args.port} — updates run independently of the map; Ctrl+C stops.', flush=True)
     try:
-        with HTTPServer(('127.0.0.1', args.port), Handler) as server:
-            server.serve_forever()
+        from continuous import NativePipeline
+        with HTTPServer(('127.0.0.1', args.port), Handler) as server, worker(single_thread=args.continuous) as container, (
+                NativePipeline(container, output) if args.continuous else nullcontext()) as pipeline:
+            updater = Thread(target=update_loop, name='vbb-trip-updates')
+            updater.start()
+            try:
+                server.serve_forever()
+            finally:
+                stop.set()
+                updater.join()
     except KeyboardInterrupt:
         pass
 

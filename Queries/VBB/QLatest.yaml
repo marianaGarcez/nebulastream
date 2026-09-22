@@ -1,0 +1,55 @@
+# Long-running NES query. The adapter supplies updates, not query classifications.
+# VERSION is ordered by VBB update timestamp, then feed timestamp (32 bits each).
+# Emit false as well as true flags: downstream views must be able to clear alerts.
+query: |
+  SELECT id, ts, update_ts, state,
+    (state == UINT64(1) AND delay_s > INT64(180)) AS nes_late,
+    (state == UINT64(1) AND tgeo_at_stbox(MovingPoint(lon, lat, ts), SpatioTemporalBox(FLOAT64(13.375), FLOAT64(13.43), FLOAT64(52.485), FLOAT64(52.54), UINT64(0), UINT64(4102444800)))) AS nes_in_region,
+    (state == UINT64(1) AND delay_s > INT64(180) AND tgeo_at_stbox(MovingPoint(lon, lat, ts), SpatioTemporalBox(FLOAT64(13.375), FLOAT64(13.43), FLOAT64(52.485), FLOAT64(52.54), UINT64(0), UINT64(4102444800)))) AS nes_late_in_region
+  FROM vbb_updates
+  LATEST BY id VERSION BY update_ts * UINT64(4294967296) + ts
+  INTO VBB_LATEST_SINK
+
+sinks:
+  - name: VBB_LATEST_SINK
+    host: localhost:8080
+    type: File
+    schema:
+      - {name: ID, type: UINT64}
+      - {name: TS, type: UINT64}
+      - {name: UPDATE_TS, type: UINT64}
+      - {name: STATE, type: UINT64}
+      - {name: NES_LATE, type: BOOLEAN, nullable: true}
+      - {name: NES_IN_REGION, type: BOOLEAN}
+      - {name: NES_LATE_IN_REGION, type: BOOLEAN, nullable: true}
+    config:
+      file_path: Output/vbb/latest-results.jsonl
+      output_format: JSON
+      append: "false"
+
+logical:
+  - name: vbb_updates
+    schema:
+      - {name: id, type: UINT64}
+      - {name: ts, type: UINT64}
+      - {name: update_ts, type: UINT64}
+      - {name: state, type: UINT64}
+      - {name: lon, type: FLOAT64}
+      - {name: lat, type: FLOAT64}
+      - {name: delay_s, type: INT64, nullable: true}
+
+physical:
+  - logical: vbb_updates
+    host: localhost:8080
+    type: TCP
+    parser_config:
+      type: JSON
+    source_config:
+      socket_host: host.docker.internal
+      socket_port: "18081"
+      flush_interval_ms: "100"
+
+workers:
+  - host: localhost:8080
+    data_address: localhost:9090
+    max_operators: 10000

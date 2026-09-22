@@ -4,11 +4,17 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from serve import HERE, ROOT, run_queries
+from serve import HERE, ROOT, run_queries, worker
 import yaml
 
 
 class QueryResultsTests(unittest.TestCase):
+    def test_existing_worker_is_reused_without_stopping(self):
+        with patch('serve.command') as invoke:
+            with worker('existing-worker') as container:
+                self.assertEqual(container, 'existing-worker')
+            invoke.assert_not_called()
+
     def test_reads_sink_ids(self):
         with tempfile.TemporaryDirectory(dir=ROOT / 'Output/vbb') as directory:
             stage = Path(directory)

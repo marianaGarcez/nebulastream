@@ -41,7 +41,7 @@ async function display(load) {
       }),
       onEachFeature: (feature, marker) => {
         const p = feature.properties, popup = document.createElement('div');
-        popup.textContent = `${p.line} → ${p.next_stop} | delay: ${p.delay_s == null ? 'unknown' : p.delay_s + ' s'} | update age at snapshot: ${p.update_age_s} s | ESTIMATED`;
+        popup.textContent = `${p.line} trip ${p.trip_id} (${p.service_date}) → ${p.next_stop} | delay: ${p.delay_s == null ? 'unknown' : p.delay_s + ' s'} | update age at snapshot: ${p.update_age_s} s | ESTIMATED`;
         if ('nes_in_region' in p) popup.textContent += ` | NES region: ${p.nes_in_region ? 'inside' : 'outside'} | NES late + region: ${p.nes_late_in_region}`;
         marker.bindPopup(popup);
       }
@@ -57,6 +57,12 @@ async function display(load) {
       const c = data.metadata.query_result_counts;
       const outside = data.features.length - c.nes_in_region;
       status.textContent += ` | NebulaStream: ${c.nes_late} late, ${c.nes_in_region} in region (thick outline), ${outside} outside region, ${c.nes_late_in_region} late and in region.`;
+    }
+    if (data.metadata.state_counts) {
+      status.textContent += ' | Trip states: ' + Object.entries(data.metadata.state_counts).map(([key, count]) => `${count} ${key}`).join(', ');
+    }
+    if (data.metadata.query_id) {
+      status.textContent += ` | Continuous NES query: ${data.metadata.query_id} (LatestByKey).`;
     }
   } catch (error) { status.textContent = `Cannot load snapshot: ${error.message}`; }
 }

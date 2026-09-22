@@ -198,7 +198,6 @@ public:
 
 private:
     bool tryToConnect(const addrinfo* result, int flags);
-    bool fillBuffer(TupleBuffer& tupleBuffer, size_t& numReceivedBytes);
 
     int connection = -1;
     int sockfd = -1;

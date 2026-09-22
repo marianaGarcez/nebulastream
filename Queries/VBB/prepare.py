@@ -54,7 +54,13 @@ def estimate(update, stops, at, max_segment=600):
     return None
 
 
-def snapshot(feed, tables, lines, max_age):
+def trip_identity(key):
+    """Stable trip-instance ID, exactly representable by JavaScript numbers."""
+    encoded = json.dumps(key, separators=(',', ':'))
+    return encoded, int(hashlib.sha256(encoded.encode()).hexdigest()[:13], 16)
+
+
+def snapshot(feed, tables, lines, max_age, trip_states=None):
     agencies, routes, trips, stops = tables
     at = int(feed.header.timestamp)
     if not at or feed.header.incrementality != pb.FeedHeader.FULL_DATASET:
@@ -82,21 +88,37 @@ def snapshot(feed, tables, lines, max_age):
         if previous is None or update.timestamp >= previous.timestamp:
             latest[key] = update
     rows, details = [], []
+    identities = {}
     for key, update in sorted(latest.items()):
+        identity, identifier = trip_identity(key)
+        if identifier in identities and identities[identifier] != identity:
+            raise ValueError('Trip ID hash collision')
+        identities[identifier] = identity
+        state = {'id': identifier, 'trip_key': identity, 'trip_id': key[0],
+                 'service_date': key[1], 'start_time': key[2],
+                 'line': routes[update.trip.route_id]['route_short_name'],
+                 'update_timestamp': int(update.timestamp) if update.HasField('timestamp') else None,
+                 'status': 'active'}
+        if trip_states is not None:
+            trip_states.append(state)
         if update.trip.schedule_relationship != pb.TripDescriptor.SCHEDULED:
+            state['status'] = ('cancelled' if update.trip.schedule_relationship == pb.TripDescriptor.CANCELED
+                               else 'unsupported')
             counts["excluded_trip_relationship"] += 1
             continue
         if not update.HasField("timestamp") or not 0 <= at - update.timestamp <= max_age:
+            state['status'] = 'stale'
             counts["stale_or_missing_update_timestamp"] += 1
             continue
         position = estimate(update, stops, at)
         if position is None:
+            state['status'] = 'no_position'
             counts["no_valid_bracketing_segment"] += 1
             continue
         lon, lat, stop, arrival = position
         delay = int(arrival.delay) if arrival.HasField("delay") else None
-        rows.append({"ID": len(rows) + 1, "TS": at, "LON": lon, "LAT": lat, "DELAY_S": delay})
-        details.append({"id": len(rows), "trip_id": key[0], "service_date": key[1],
+        rows.append({"ID": identifier, "TS": at, "LON": lon, "LAT": lat, "DELAY_S": delay})
+        details.append({"id": identifier, "trip_key": identity, "trip_id": key[0], "service_date": key[1],
                         "start_time": key[2], "line": routes[update.trip.route_id]["route_short_name"],
                         "next_stop": stops[stop.stop_id]["stop_name"], "next_stop_id": stop.stop_id,
                         "predicted_arrival": int(arrival.time), "delay_s": delay,
@@ -130,7 +152,8 @@ def main():
     raw = args.realtime.read_bytes()
     feed.ParseFromString(raw)
     lines = set(args.lines or ["M41", "M10"])
-    rows, details, counts = snapshot(feed, static_tables(args.static), lines, args.max_update_age)
+    trip_states = []
+    rows, details, counts = snapshot(feed, static_tables(args.static), lines, args.max_update_age, trip_states)
     variant = re.search(r"schedule_sha256=([^;\s]+)", args.headers.read_text())
     with args.static.open("rb") as stream:
         static_hash = hashlib.file_digest(stream, "sha256").hexdigest()
@@ -144,6 +167,7 @@ def main():
                 "max_update_age_s": args.max_update_age,
                 "warning": "Recorded snapshot; incomplete coverage; interpolated positions are not GPS or ground truth"}
     write_input(args.output, rows, details, metadata)
+    (args.output / 'trips.json').write_text(json.dumps(trip_states))
     print(json.dumps(metadata, indent=2))
 
 
