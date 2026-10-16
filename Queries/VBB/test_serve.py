@@ -2,13 +2,20 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from serve import HERE, ROOT, run_queries, worker
+from serve import HERE, ROOT, run_queries, worker, wait_for_next_refresh
 import yaml
 
 
 class QueryResultsTests(unittest.TestCase):
+    def test_refresh_interval_accounts_for_processing_time(self):
+        for elapsed, expected_wait in ((0, 1.01), (.5, .51), (2, 0), (5, 0)):
+            with self.subTest(elapsed=elapsed), patch('serve.time.monotonic', return_value=100 + elapsed):
+                stop = Mock()
+                wait_for_next_refresh(stop, 100)
+                stop.wait.assert_called_once_with(expected_wait)
+
     def test_existing_worker_is_reused_without_stopping(self):
         with patch('serve.command') as invoke:
             with worker('existing-worker') as container:

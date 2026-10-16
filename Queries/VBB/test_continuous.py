@@ -38,14 +38,28 @@ class ContinuousTest(unittest.TestCase):
             pipeline.sink = Path(directory) / 'results.jsonl'
             pipeline.sink.write_text(
                 NativePipeline.HEADER + '\n'
-                + json.dumps({'ID': 4, 'TS': 1000, 'UPDATE_TS': 900, 'STATE': 1}) + '\n'
-                + json.dumps({'ID': 0, 'TS': 1000}) + '\n')
+                + json.dumps({'ID': 4, 'TS': 1000, 'UPDATE_TS': 900, 'BATCH': 1, 'STATE': 1}) + '\n'
+                + json.dumps({'ID': 0, 'TS': 1000, 'BATCH': 1}) + '\n')
             pipeline.send([], 1000)
             self.assertEqual(pipeline.results[4]['UPDATE_TS'], 900)
             pipeline.send([], 1000)
             pipeline.connection.sendall.assert_called_once()
+            with pipeline.sink.open('a') as sink:
+                sink.write(json.dumps({'ID': 4, 'TS': 1000, 'UPDATE_TS': 900, 'BATCH': 2, 'STATE': 2}) + '\n')
+                sink.write(json.dumps({'ID': 0, 'TS': 1000, 'BATCH': 2}) + '\n')
+            pipeline.send([{'ID': 4, 'STATE': 2}], 1000)
+            self.assertEqual(pipeline.results[4]['STATE'], 2)
+            self.assertEqual(pipeline.batch, 2)
             with self.assertRaises(ValueError):
                 pipeline.send([], 999)
+
+    def test_batch_overflow_is_rejected_before_sending(self):
+        pipeline = NativePipeline('unused', Path('.'))
+        pipeline.connection = Mock()
+        pipeline.batch = 2**32 - 1
+        with self.assertRaises(ValueError):
+            pipeline.send([], 1000)
+        pipeline.connection.sendall.assert_not_called()
 
     def test_failed_session_is_not_retried(self):
         pipeline = NativePipeline('unused', Path('.'))

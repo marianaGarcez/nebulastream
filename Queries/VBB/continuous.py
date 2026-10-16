@@ -41,7 +41,7 @@ def input_rows(stage):
 
 class NativePipeline:
     HEADER = ('ID:UINT64:NOT_NULLABLE,TS:UINT64:NOT_NULLABLE,UPDATE_TS:UINT64:NOT_NULLABLE,'
-              'STATE:UINT64:NOT_NULLABLE,NES_LATE:BOOLEAN:IS_NULLABLE,'
+              'BATCH:UINT64:NOT_NULLABLE,STATE:UINT64:NOT_NULLABLE,NES_LATE:BOOLEAN:IS_NULLABLE,'
               'NES_IN_REGION:BOOLEAN:NOT_NULLABLE,NES_LATE_IN_REGION:BOOLEAN:IS_NULLABLE')
 
     def __init__(self, container, output):
@@ -55,6 +55,7 @@ class NativePipeline:
         self.failed = False
         self.header_seen = False
         self.last_fingerprint = None
+        self.batch = 0
 
     def __enter__(self):
         self.output.mkdir(parents=True, exist_ok=True)
@@ -99,11 +100,15 @@ class NativePipeline:
             raise RuntimeError('Native stream needs a restart after an incomplete feed')
         if at < self.last_feed:
             raise ValueError('Out-of-order feed timestamp')
-        if at == self.last_feed:
+        fingerprint = json.dumps(rows, sort_keys=True)
+        if at == self.last_feed and fingerprint == self.last_fingerprint:
             return
+        if self.batch >= 2**32 - 1:
+            raise ValueError('Native batch counter exhausted; restart the server')
+        self.batch += 1
         boundary = {'ID': 0, 'TS': at, 'UPDATE_TS': at, 'STATE': 0,
                     'LON': 0., 'LAT': 0., 'DELAY_S': None}
-        payload = ''.join(json.dumps(r) + '\n' for r in [*rows, boundary])
+        payload = ''.join(json.dumps(dict(r, BATCH=self.batch)) + '\n' for r in [*rows, boundary])
         # Any transport/parse/timeout failure poisons this session. Retrying a
         # partially processed boundary would otherwise make completion ambiguous.
         self.failed = True
@@ -129,13 +134,14 @@ class NativePipeline:
                         continue
                     row = json.loads(line)
                     if row['ID'] == 0:
-                        complete |= row['TS'] == at
+                        complete |= row['BATCH'] == self.batch
                     else:
                         prior = self.results.get(row['ID'])
-                        if prior is None or (row['UPDATE_TS'], row['TS']) > (prior['UPDATE_TS'], prior['TS']):
+                        if prior is None or (row['UPDATE_TS'], row['BATCH']) > (prior['UPDATE_TS'], prior['BATCH']):
                             self.results[row['ID']] = row
                 if complete:
                     self.last_feed = at
+                    self.last_fingerprint = fingerprint
                     self.failed = False
                     return
             time.sleep(.05)
@@ -147,12 +153,8 @@ class NativePipeline:
         at = data['metadata']['feed_timestamp']
         if not -60 <= time.time() - at <= 300:
             raise ValueError('VBB feed is stale or in the future')
-        fingerprint = (data['metadata'].get('realtime_sha256'), data['metadata'].get('static_zip_sha256'))
-        if at == self.last_feed and self.last_fingerprint is not None and fingerprint != self.last_fingerprint:
-            raise ValueError('Conflicting snapshot with the same feed timestamp; refusing to mix it with prior NES results')
         self.send(rows, at)
-        self.last_fingerprint = fingerprint
-        accepted = {key: r for key, r in self.results.items() if r['TS'] == at}
+        accepted = {key: r for key, r in self.results.items() if r['BATCH'] == self.batch}
         features = []
         for feature in data['features']:
             result = accepted.get(feature['properties']['id'])

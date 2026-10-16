@@ -15,6 +15,12 @@ from trip_state import reconcile
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
+REFRESH_INTERVAL_S = 1.01
+
+
+def wait_for_next_refresh(stop, started):
+    """Space cycle starts below 60/minute; slow cycles never cause catch-up bursts."""
+    stop.wait(max(0.0, REFRESH_INTERVAL_S - (time.monotonic() - started)))
 
 
 def command(args):
@@ -191,15 +197,17 @@ def main():
     stop = Event()
     def update_loop():
         while not stop.is_set():
+            started = time.monotonic()
             try:
                 refresh(args.static, output, container, pipeline)
                 Handler.error = None
             except Exception as error:
                 Handler.error = str(error)
                 print(f'Refresh failed: {error}', flush=True)
-            stop.wait(30)
+            wait_for_next_refresh(stop, started)
 
-    print(f'Open http://127.0.0.1:{args.port} — updates run independently of the map; Ctrl+C stops.', flush=True)
+    print(f'Open http://127.0.0.1:{args.port} — VBB refresh target: every {REFRESH_INTERVAL_S:g} s '
+          f'(up to {60 / REFRESH_INTERVAL_S:.1f} requests/minute); updates run independently of the map; Ctrl+C stops.', flush=True)
     try:
         from continuous import NativePipeline
         with HTTPServer(('127.0.0.1', args.port), Handler) as server, worker(single_thread=args.continuous) as container, (

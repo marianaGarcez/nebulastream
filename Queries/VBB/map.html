@@ -72,7 +72,7 @@ async function display(load) {
       if (!response.ok) throw new Error('Refresh unavailable; no current positions shown');
       return response.json();
     });
-    setTimeout(poll, 30000);
+    setTimeout(poll, 2000);
   }
   poll();
 </script>

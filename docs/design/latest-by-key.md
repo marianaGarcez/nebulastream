@@ -44,6 +44,10 @@ Queries/VBB/.venv/bin/python Queries/VBB/serve.py --continuous
 ```
 
 Stop an older server on port 8000 first. The server deploys QLatest.yaml once.
+The fetch loop targets one cycle every 1.01 seconds (up to 59.4 VBB requests/minute
+per server process), including processing time. Slow cycles do not cause catch-up
+bursts. The browser refreshes from the local server every two seconds; those reads
+do not request VBB data. Run only one fetcher if you want this request budget.
 Python fetches/decodes FULL_DATASET updates, performs the existing static-data
 lookup and position interpolation, then sends normalized rows over a persistent
 TCP connection. It does not decide which versions win or evaluate spatial/late
@@ -55,10 +59,15 @@ and publishes the current-feed map view; it bypasses trip_state.reconcile.
 Trips absent from the current feed are not plotted, but are not declared
 cancelled. Records rejected as older are likewise not plotted as current.
 
-The version expression packs VBB update timestamp (high 32 bits) and feed timestamp
-(low 32 bits). This allows estimated progress to refresh when the underlying VBB
-revision is unchanged, while rejecting older VBB revisions even in newer feeds.
-The adapter checks the timestamp range to prevent overflow. Missing update
+The version expression packs VBB update timestamp (high 32 bits) and a local batch
+sequence (low 32 bits). Changed normalized rows can therefore be processed even
+when the feed and trip timestamps are unchanged. Equal provider timestamps use
+local observation order as a fallback, not proof of a newer provider revision.
+Older trip timestamps still lose. Identical rows at the same feed timestamp reuse
+the previous results; older feed timestamps are rejected. The original feed time
+remains the spatial predicate timestamp. Boundaries and the current map view use
+the batch sequence, so an earlier same-timestamp batch cannot acknowledge a new one.
+The adapter checks timestamp and batch ranges to prevent overflow. Missing update
 timestamps are encoded as zero, not invented observations. Trip keys use the
 existing stable trip-instance IDs; zero is reserved for a feed-boundary record.
 

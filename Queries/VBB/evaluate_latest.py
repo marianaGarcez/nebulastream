@@ -20,6 +20,16 @@ def main():
         assert pipeline.results[2]['NES_IN_REGION'] is False
         assert pipeline.results[3]['NES_LATE'] is None
 
+        # Provider timestamps do not uniquely identify a payload.
+        changed = [row(1, 1000, 900, 60), row(3, 1000, 899, 300)]
+        pipeline.send(changed, 1000)
+        assert pipeline.results[1]['NES_LATE'] is False
+        assert pipeline.results[1]['BATCH'] == pipeline.batch
+        assert pipeline.results[3]['BATCH'] < pipeline.batch, 'older revision must not enter current batch'
+        batch = pipeline.batch
+        pipeline.send(changed, 1000)
+        assert pipeline.batch == batch, 'identical snapshot must reuse results'
+
         pipeline.send([row(1, 1001, 901, 60), row(1, 1001, 901, 500),
                        row(2, 1001, 901, None, state=2), row(3, 1001, 899, 300)], 1001)
         assert pipeline.results[1]['NES_LATE'] is False, 'on-time revision must clear alert; duplicate must not overwrite it'
@@ -44,7 +54,8 @@ def main():
         report = {'query_id': pipeline.query_id, 'worker_id': container, 'passed': True,
                   'checks': ['late-to-on-time', 'duplicate', 'out-of-order', 'explicit cancellation',
                              'unknown delay', 'empty feed', 'same-version newer feed', 'idle TCP survives',
-                             'multi-buffer feed completion'],
+                             'multi-buffer feed completion', 'changed payload with same timestamps',
+                             'identical snapshot skipped', 'older revision excluded from current batch'],
                   'scope': 'native keyed version state and NES geographic/late flags, not ETA accuracy'}
         path = output / f'latest-by-key-{time.time_ns()}.json'
         path.write_text(json.dumps(report, indent=2) + '\n')
