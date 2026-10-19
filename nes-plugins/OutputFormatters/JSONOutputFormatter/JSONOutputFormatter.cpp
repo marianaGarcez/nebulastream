@@ -246,6 +246,19 @@ void writeValue(
         case DataType::Type::VARARRAY: {
             /// Vararray can use the same pattern as Fixedsized
             const auto varArrayVal = value.getRawValueAs<VarArrayData>();
+            // Nonempty arrays write '[' with their first element; empty arrays need it explicitly.
+            if (varArrayVal.getNumElements() == nautilus::val<uint64_t>{0})
+            {
+                const auto prefixWritten = nautilus::invoke(
+                    writeArrayPrefix,
+                    nautilus::val<bool>{true},
+                    currentRemainingSize,
+                    recordBuffer.getReference(),
+                    bufferProvider,
+                    fieldPointer + written);
+                written += prefixWritten;
+                currentRemainingSize -= prefixWritten;
+            }
             for (nautilus::val<uint64_t> i = 0; i < varArrayVal.getNumElements(); ++i)
             {
                 const nautilus::val<uint64_t> amountWritten = nautilus::invoke(
