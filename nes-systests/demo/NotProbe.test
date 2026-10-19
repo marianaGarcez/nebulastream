@@ -1,0 +1,29 @@
+# name: demo/NotProbe.test
+# description: Regression test for negating a plugin predicate. NOT <plugin call> fails to deserialize (error 2002); NOT (A OR A) is the working equivalent. Delete the workaround once fixed.
+# groups: [Demo, Meos]
+
+CREATE LOGICAL SOURCE sncb_stream(ts UINT64 NOT NULL, deviceid UINT64 NOT NULL, vbat FLOAT64 NOT NULL, pcfa_mbar FLOAT64 NOT NULL, pcff_mbar FLOAT64 NOT NULL, pcf1_mbar FLOAT64 NOT NULL, pcf2_mbar FLOAT64 NOT NULL, t1_mbar FLOAT64 NOT NULL, t2_mbar FLOAT64 NOT NULL, code1 FLOAT64 NOT NULL, code2 FLOAT64 NOT NULL, gsp_speed FLOAT64 NOT NULL, gps_lat FLOAT64 NOT NULL, gps_lon FLOAT64 NOT NULL);
+CREATE PHYSICAL SOURCE FOR sncb_stream TYPE FILE;
+ATTACH FILE small/input_sncb.csv
+
+# Control: NOT over a plain comparison deserializes fine.
+SELECT ts FROM sncb_stream WHERE NOT (gsp_speed < FLOAT64(0.03)) AND ts < UINT64(1722520370) INTO FILE('CSV' as `SINK`.OUTPUT_FORMAT);
+----
+1722520348
+1722520348
+1722520358
+1722520358
+1722520368
+1722520368
+
+# Working form: NOT over a disjunction repeating the same plugin call.
+SELECT ts, deviceid, gsp_speed FROM sncb_stream WHERE gsp_speed < FLOAT64(20.0) AND NOT (tgeo_at_stbox(MovingPoint(gps_lon, gps_lat, ts), SpatioTemporalBox(FLOAT64(4.3), FLOAT64(4.4), FLOAT64(50.6), FLOAT64(50.7), UINT64(1722470400), UINT64(1754006400))) OR tgeo_at_stbox(MovingPoint(gps_lon, gps_lat, ts), SpatioTemporalBox(FLOAT64(4.3), FLOAT64(4.4), FLOAT64(50.6), FLOAT64(50.7), UINT64(1722470400), UINT64(1754006400)))) INTO FILE('CSV' as `SINK`.OUTPUT_FORMAT);
+----
+1722520403,4,15.6399
+1722520414,4,15.6399
+1722520424,4,15.6399
+1722520429,5,14.023
+1722520434,4,15.6399
+1722520439,5,14.023
+1722520449,5,14.023
+1722520520,5,0.0426

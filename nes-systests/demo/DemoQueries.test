@@ -1,0 +1,214 @@
+# name: demo/DemoQueries.test
+# description: The eight SIGMOD 2025 demo queries expressed with Leo's DataType plugins, over a real SNCB slice. References are the old-API originals in nebulastream-private/nes-plugins/meos/tests/Integration/MeosSNCBQuery{1..8}.cpp.
+# groups: [Demo, GeoTemporal, Meos]
+
+# ---------------------------------------------------------------------------
+# Data: a contiguous two-hour slice (1722657600..1722664800) of the SNCB dataset the
+# demo itself used (M6_data_csv/selected_columns_df_original.csv, 4.1M rows). Every
+# query below reads this one slice.
+#
+# The slice was chosen because it contains both event classes the demo needs:
+#   1683 rows, 4 devices, 29 rows with gps_speed < 0.002 (Q7), 307 with code1 > 0 (Q8).
+#
+# Geography in this slice:
+#   device 1  moving, lat 51.03..51.34, lon 3.20..3.71   (West Flanders)
+#   device 4  moving, lat 50.84..51.20, lon 3.22..4.20
+#   device 3  parked, lat 51.2245,      lon 4.4415       (Antwerp workshop)
+#   device 5  parked, lat 50.4196,      lon 4.5349       (Charleroi workshop)
+# ---------------------------------------------------------------------------
+CREATE LOGICAL SOURCE sncb_stream(ts UINT64 NOT NULL, deviceid UINT64 NOT NULL, vbat FLOAT64 NOT NULL, pcfa_mbar FLOAT64 NOT NULL, pcff_mbar FLOAT64 NOT NULL, pcf1_mbar FLOAT64 NOT NULL, pcf2_mbar FLOAT64 NOT NULL, t1_mbar FLOAT64 NOT NULL, t2_mbar FLOAT64 NOT NULL, code1 FLOAT64 NOT NULL, code2 FLOAT64 NOT NULL, gsp_speed FLOAT64 NOT NULL, gps_lat FLOAT64 NOT NULL, gps_lon FLOAT64 NOT NULL);
+CREATE PHYSICAL SOURCE FOR sncb_stream TYPE FILE;
+ATTACH FILE small/sncb_demo.csv
+
+# ===========================================================================
+# Q1 — Location-Based Alert Filtering
+# Reference: MeosSNCBQuery1.cpp
+#   .filter(teintersects(lon, lat, ts) == 1 && (Code1 != 0 || Code2 != 0))
+#   .window(SlidingWindow) .apply(Avg(speed))
+# The demo's teintersects carried its geometry inside the operator; the operational
+# area is a lon/lat rectangle, so it lifts to an explicit SpatioTemporalBox.
+# ===========================================================================
+SELECT start, end, AVG(gsp_speed) AS avg_speed FROM sncb_stream WHERE tgeo_at_stbox(MovingPoint(gps_lon, gps_lat, ts), SpatioTemporalBox(FLOAT64(3.0), FLOAT64(4.0), FLOAT64(50.8), FLOAT64(51.4), UINT64(1722657600), UINT64(1722664800))) AND (code1 != FLOAT64(0.0) OR code2 != FLOAT64(0.0)) WINDOW SLIDING(ts, SIZE 600 ms, ADVANCE BY 300 ms) INTO FILE('CSV' as `SINK`.OUTPUT_FORMAT);
+----
+1722657300,1722657900,0.022326
+1722657600,1722658200,0.021642
+1722657900,1722658500,4.165962
+1722658200,1722658800,4.863283
+1722658500,1722659100,0.58784
+1722658800,1722659400,0.02318
+1722659100,1722659700,10.041776
+1722659400,1722660000,33.835469
+1722659700,1722660300,46.600103
+1722660000,1722660600,29.754176
+1722660300,1722660900,9.529305
+1722660600,1722661200,2.834509
+1722660900,1722661500,0.01937
+1722661200,1722661800,1.529542
+1722661500,1722662100,29.074917
+1722661800,1722662400,64.256805
+1722662100,1722662700,71.253856
+1722662400,1722663000,85.366521
+1722662700,1722663300,75.550575
+1722663000,1722663600,45.50878
+1722663300,1722663900,79.698573
+1722663600,1722664200,103.777413
+1722663900,1722664500,111.081752
+1722664200,1722664800,108.315937
+1722664500,1722665100,70.409483
+
+# ===========================================================================
+# Q2 — Location-Based Noise Monitoring
+# Reference: MeosSNCBQuery2.cpp
+#   .filter(tpointatstbox(...) == 1 && speed > 0 && PCFA_mbar > 0
+#           && speed*0.5 + PCFA_mbar*0.5 > 2)
+#   .window(TumblingWindow) .apply(Max(PCFA_mbar))
+# ===========================================================================
+SELECT start, end, MAX(pcfa_mbar) AS max_pcfa FROM sncb_stream WHERE tgeo_at_stbox(MovingPoint(gps_lon, gps_lat, ts), SpatioTemporalBox(FLOAT64(3.0), FLOAT64(4.0), FLOAT64(50.8), FLOAT64(51.4), UINT64(1722657600), UINT64(1722664800))) AND gsp_speed > FLOAT64(0.0) AND pcfa_mbar > FLOAT64(0.0) AND gsp_speed * FLOAT64(0.5) + pcfa_mbar * FLOAT64(0.5) > FLOAT64(2.0) WINDOW TUMBLING(ts, size 600 ms) INTO FILE('CSV' as `SINK`.OUTPUT_FORMAT);
+----
+1722659400,1722660000,0.27
+1722660000,1722660600,1.552
+1722660600,1722661200,1.117
+1722661200,1722661800,5.002
+1722661800,1722662400,5.01
+1722662400,1722663000,5.013
+1722663000,1722663600,5.01
+1722663600,1722664200,5.021
+1722664200,1722664800,5.021
+
+# ===========================================================================
+# Q3 — Dynamic Speed Limit
+# Reference: MeosSNCBQuery3.cpp
+#   query1 = from("highriskArea").filter(tedwithin(lon, lat, ts) == 1 && ts > 0)
+#   from("sncb").joinWith(query1).where(timestamp == highriskArea$timestamp)
+#              .window(SlidingWindow).filter(ABS(dlat) <= slack && ABS(dlon) <= slack)
+#              .project(timestamp, id, speed, Vbat)
+# The zone geometry, hidden inside the old tedwithin, is now an explicit Polygon column
+# on the zone stream. zts duplicates ts so the join key is unambiguous while ts stays
+# resolvable in both inputs (see Phase0.test).
+#
+# LIMITATION: a variable-sized Polygon column cannot flow through a join - carrying it
+# via SELECT * aborts the worker ("terminate called without an active exception").
+# The inner SELECT therefore projects the polygon away after the predicate has used it.
+# See demo/PolygonJoin.test.
+# ===========================================================================
+CREATE LOGICAL SOURCE highrisk_zone(ts UINT64 NOT NULL, zts UINT64 NOT NULL, hlon FLOAT64 NOT NULL, hlat FLOAT64 NOT NULL, polygon Polygon NOT NULL);
+CREATE PHYSICAL SOURCE FOR highrisk_zone TYPE File SET('NestedJSON' AS `PARSER`.`TYPE`);
+ATTACH INLINE
+{"TS": 1722657621, "ZTS": 1722657621, "HLON": 3.2236, "HLAT": 51.1873, "POLYGON": {"vertices": [{"x": 3.15, "y": 51.15}, {"x": 3.30, "y": 51.15}, {"x": 3.30, "y": 51.25}, {"x": 3.15, "y": 51.25}, {"x": 3.15, "y": 51.15}]}}
+{"TS": 1722658638, "ZTS": 1722658638, "HLON": 3.2236, "HLAT": 51.1873, "POLYGON": {"vertices": [{"x": 3.15, "y": 51.15}, {"x": 3.30, "y": 51.15}, {"x": 3.30, "y": 51.25}, {"x": 3.15, "y": 51.25}, {"x": 3.15, "y": 51.15}]}}
+{"TS": 1722658648, "ZTS": 1722658648, "HLON": 3.2236, "HLAT": 51.1873, "POLYGON": {"vertices": [{"x": 3.15, "y": 51.15}, {"x": 3.30, "y": 51.15}, {"x": 3.30, "y": 51.25}, {"x": 3.15, "y": 51.25}, {"x": 3.15, "y": 51.15}]}}
+
+SELECT ts, deviceid, gsp_speed, vbat FROM (SELECT * FROM sncb_stream) INNER JOIN (SELECT zts, hlon, hlat, ts FROM highrisk_zone WHERE edwithin_tgeo_geo(MovingPoint(hlon, hlat, ts), polygon, FLOAT64(0.01))) ON ts = zts WINDOW TUMBLING(ts, SIZE 600 ms) INTO FILE('CSV' as `SINK`.OUTPUT_FORMAT);
+----
+1722657621,3,0.0555,23.0
+1722657621,4,0.0278,30.2
+1722658638,3,0.0074,22.8
+1722658638,5,0.0111,29.4
+1722658648,3,0.037,22.9
+1722658648,5,0.0111,30.2
+
+# ===========================================================================
+# Q4 — Weather-Based Speed Zones
+# Reference: MeosSNCBQuery4.cpp
+#   weatherQuery = from("weather").filter(tedwithin(gps_lon, gps_lat, timestamp)==1)
+#                  .filter(temperature < 12.0 || temperature > 16.0)
+#                  .filter(snowfall >= 0.0 || wind_speed > 15.0 || precipitation > 0.1)
+#                  .map(adjusted_speed_limit = 15.0)
+#   from("sncb").joinWith(weatherQuery).where(timestamp == weather$timestamp)
+#
+# Same Polygon-through-join limitation as Q3; the polygon is projected away after use.
+# ===========================================================================
+CREATE LOGICAL SOURCE weather(ts UINT64 NOT NULL, wts UINT64 NOT NULL, wlon FLOAT64 NOT NULL, wlat FLOAT64 NOT NULL, temperature FLOAT64 NOT NULL, snowfall FLOAT64 NOT NULL, wind_speed FLOAT64 NOT NULL, precipitation FLOAT64 NOT NULL, polygon Polygon NOT NULL);
+CREATE PHYSICAL SOURCE FOR weather TYPE File SET('NestedJSON' AS `PARSER`.`TYPE`);
+ATTACH INLINE
+{"TS": 1722657621, "WTS": 1722657621, "WLON": 3.2236, "WLAT": 51.1873, "TEMPERATURE": 8.0, "SNOWFALL": 0.4, "WIND_SPEED": 20.0, "PRECIPITATION": 0.5, "POLYGON": {"vertices": [{"x": 3.15, "y": 51.15}, {"x": 3.30, "y": 51.15}, {"x": 3.30, "y": 51.25}, {"x": 3.15, "y": 51.25}, {"x": 3.15, "y": 51.15}]}}
+{"TS": 1722658638, "WTS": 1722658638, "WLON": 3.2236, "WLAT": 51.1873, "TEMPERATURE": 14.0, "SNOWFALL": 0.0, "WIND_SPEED": 2.0, "PRECIPITATION": 0.0, "POLYGON": {"vertices": [{"x": 3.15, "y": 51.15}, {"x": 3.30, "y": 51.15}, {"x": 3.30, "y": 51.25}, {"x": 3.15, "y": 51.25}, {"x": 3.15, "y": 51.15}]}}
+{"TS": 1722658648, "WTS": 1722658648, "WLON": 3.2236, "WLAT": 51.1873, "TEMPERATURE": 18.0, "SNOWFALL": 0.2, "WIND_SPEED": 18.0, "PRECIPITATION": 0.3, "POLYGON": {"vertices": [{"x": 3.15, "y": 51.15}, {"x": 3.30, "y": 51.15}, {"x": 3.30, "y": 51.25}, {"x": 3.15, "y": 51.25}, {"x": 3.15, "y": 51.15}]}}
+
+SELECT ts, deviceid, gsp_speed, temperature, FLOAT64(15.0) AS adjusted_speed_limit FROM (SELECT * FROM sncb_stream) INNER JOIN (SELECT wts, ts, temperature FROM weather WHERE edwithin_tgeo_geo(MovingPoint(wlon, wlat, ts), polygon, FLOAT64(0.01)) AND (temperature < FLOAT64(12.0) OR temperature > FLOAT64(16.0)) AND (snowfall >= FLOAT64(0.0) OR wind_speed > FLOAT64(15.0) OR precipitation > FLOAT64(0.1))) ON ts = wts WINDOW TUMBLING(ts, SIZE 600 ms) INTO FILE('CSV' as `SINK`.OUTPUT_FORMAT);
+----
+1722657621,3,0.0555,8.0,15.0
+1722657621,4,0.0278,8.0,15.0
+1722658648,3,0.037,18.0,15.0
+1722658648,5,0.0111,18.0,15.0
+
+# ===========================================================================
+# Q5 — Battery Monitoring
+# Reference: MeosSNCBQuery5.cpp
+#   .filter(distancetpointstbox(lon, lat, ts) < 3 && ABS(lat - workshops$lat) <= 0.5
+#           && ABS(lon - workshops$lon) <= 0.5 && Vbat < 30.0 && speed > 0.0)
+# The original referenced workshops$ fields without ever joining the workshops stream.
+# Here the workshop area IS the SpatioTemporalBox handed to nad_tgeo_stbox, so the
+# distance test and the proximity test collapse into a single predicate.
+# The box is the Antwerp workshop where device 3 is parked.
+# ===========================================================================
+CREATE SINK q5Checksum(sncb_stream.ts UINT64 NOT NULL, sncb_stream.deviceid UINT64 NOT NULL, sncb_stream.vbat FLOAT64 NOT NULL, sncb_stream.gsp_speed FLOAT64 NOT NULL, dist_to_workshop FLOAT64 NOT NULL) TYPE Checksum;
+
+SELECT ts, deviceid, vbat, gsp_speed, nad_tgeo_stbox(MovingPoint(gps_lon, gps_lat, ts), SpatioTemporalBox(FLOAT64(4.43), FLOAT64(4.45), FLOAT64(51.21), FLOAT64(51.24), UINT64(1722657600), UINT64(1722664800))) AS dist_to_workshop FROM sncb_stream WHERE nad_tgeo_stbox(MovingPoint(gps_lon, gps_lat, ts), SpatioTemporalBox(FLOAT64(4.43), FLOAT64(4.45), FLOAT64(51.21), FLOAT64(51.24), UINT64(1722657600), UINT64(1722664800))) < FLOAT64(3.0) AND vbat < FLOAT64(30.0) AND gsp_speed > FLOAT64(0.0) INTO q5Checksum;
+----
+1276, 2064160
+
+# ===========================================================================
+# Q6 — Heavy Passenger Load
+# Reference: MeosSNCBQuery6.cpp
+#   passenger_count = (T1_mbar + T2_mbar + PCF1_mbar + PCF2_mbar) / 4.0 > 3.15
+#   .filter(tpointatstbox(...) == 1 && speed > -1)
+#   adjusted_temp = 20.0, adjusted_light = 80.0
+# ===========================================================================
+CREATE SINK q6Checksum(sncb_stream.ts UINT64 NOT NULL, sncb_stream.deviceid UINT64 NOT NULL, passenger_count FLOAT64 NOT NULL, adjusted_temp FLOAT64 NOT NULL, adjusted_light FLOAT64 NOT NULL) TYPE Checksum;
+
+SELECT ts, deviceid, (t1_mbar + t2_mbar + pcf1_mbar + pcf2_mbar) / FLOAT64(4.0) AS passenger_count, FLOAT64(20.0) AS adjusted_temp, FLOAT64(80.0) AS adjusted_light FROM sncb_stream WHERE (t1_mbar + t2_mbar + pcf1_mbar + pcf2_mbar) / FLOAT64(4.0) > FLOAT64(3.15) AND tgeo_at_stbox(MovingPoint(gps_lon, gps_lat, ts), SpatioTemporalBox(FLOAT64(3.0), FLOAT64(4.0), FLOAT64(50.8), FLOAT64(51.4), UINT64(1722657600), UINT64(1722664800))) AND gsp_speed > FLOAT64(-1.0) INTO q6Checksum;
+----
+851, 1286138
+
+# ===========================================================================
+# Q7 — Unscheduled Stops
+# Reference: MeosSNCBQuery7.cpp
+#   .filter(tpointatsworkshop(...) == 0)   -- i.e. OUTSIDE every workshop
+#   .filter(speed < 0.002)
+# tpointatsworkshop has no equivalent anywhere; it is the negation of a disjunction of
+# tgeo_at_stbox over the two workshop boxes (Antwerp, Charleroi). Stops inside a
+# workshop are scheduled; those outside are the alerts.
+#
+# BUG WORKAROUND: `NOT <plugin call>` fails to deserialize (error 2002, in
+# RegisterSelectionLogicalOperator), with or without parentheses. `NOT (<comparison>)`
+# is fine, so the defect is specific to negating a plugin predicate. A disjunction
+# serialises correctly, which is what this query needs anyway.
+# See demo/NotProbe.test.
+# ===========================================================================
+SELECT ts, deviceid, gsp_speed, gps_lat, gps_lon FROM sncb_stream WHERE gsp_speed < FLOAT64(0.002) AND NOT (tgeo_at_stbox(MovingPoint(gps_lon, gps_lat, ts), SpatioTemporalBox(FLOAT64(4.43), FLOAT64(4.45), FLOAT64(51.21), FLOAT64(51.24), UINT64(1722657600), UINT64(1722664800))) OR tgeo_at_stbox(MovingPoint(gps_lon, gps_lat, ts), SpatioTemporalBox(FLOAT64(4.52), FLOAT64(4.55), FLOAT64(50.41), FLOAT64(50.43), UINT64(1722657600), UINT64(1722664800)))) INTO FILE('CSV' as `SINK`.OUTPUT_FORMAT);
+----
+1722657632,4,0.0019,51.198,3.2166
+1722657817,1,0.0019,51.1873,3.2236
+1722659383,1,0.0019,51.1972,3.2175
+1722659439,4,0.0019,51.198,3.2165
+1722660408,4,0.0019,51.198,3.2165
+1722660812,4,0.0,51.198,3.2165
+1722660822,4,0.0,51.198,3.2165
+1722661322,1,0.0019,51.3397,3.2825
+
+# ===========================================================================
+# Q8 — Monitoring Brakes
+# Reference: MeosSNCBQuery8.cpp
+#   pressureQuery = from("gps").filter(Code1 > 0 && (PCFA<1.9 || PCFF<1.4 || PCF1<0.8
+#                   || PCF2<1.0 || PCFA>3.0 || PCFF>2.1 || PCF1>1.3 || PCF2>1.6))
+#   from("gps").filter(tedwithin(lon, lat, ts)==1).joinWith(pressureQuery)
+#              .where(timestamp == gps$timestamp)
+#
+# Two deviations, both forced by the engine rather than chosen:
+#   1. The geofence is a fixed zone and edwithin needs its geometry from a data column,
+#      so the equivalent nad_tgeo_stbox(...) <= d against an in-query SpatioTemporalBox
+#      is used instead.
+#   2. The original joins on equal timestamps. A join needs the window timestamp under
+#      the same name in both inputs, which makes a bare `ts = ts` join key ambiguous, so
+#      the join is on deviceid and the tumbling window supplies temporal alignment.
+# ===========================================================================
+CREATE LOGICAL SOURCE sncb_pressure(ts UINT64 NOT NULL, pdeviceid UINT64 NOT NULL, pvbat FLOAT64 NOT NULL, ppcfa_mbar FLOAT64 NOT NULL, ppcff_mbar FLOAT64 NOT NULL, ppcf1_mbar FLOAT64 NOT NULL, ppcf2_mbar FLOAT64 NOT NULL, pt1_mbar FLOAT64 NOT NULL, pt2_mbar FLOAT64 NOT NULL, pcode1 FLOAT64 NOT NULL, pcode2 FLOAT64 NOT NULL, pgsp_speed FLOAT64 NOT NULL, pgps_lat FLOAT64 NOT NULL, pgps_lon FLOAT64 NOT NULL);
+CREATE PHYSICAL SOURCE FOR sncb_pressure TYPE FILE;
+ATTACH FILE small/sncb_demo.csv
+
+CREATE SINK q8Checksum(sncb_stream.ts UINT64 NOT NULL, sncb_stream.deviceid UINT64 NOT NULL, sncb_stream.gsp_speed FLOAT64 NOT NULL, sncb_stream.gps_lat FLOAT64 NOT NULL, sncb_stream.gps_lon FLOAT64 NOT NULL, sncb_pressure.ppcfa_mbar FLOAT64 NOT NULL, sncb_pressure.ppcff_mbar FLOAT64 NOT NULL) TYPE Checksum;
+
+SELECT ts, deviceid, gsp_speed, gps_lat, gps_lon, ppcfa_mbar, ppcff_mbar FROM (SELECT * FROM sncb_stream WHERE nad_tgeo_stbox(MovingPoint(gps_lon, gps_lat, ts), SpatioTemporalBox(FLOAT64(3.0), FLOAT64(4.0), FLOAT64(50.8), FLOAT64(51.4), UINT64(1722657600), UINT64(1722664800))) <= FLOAT64(0.01)) INNER JOIN (SELECT * FROM sncb_pressure WHERE pcode1 > FLOAT64(0.0) AND (ppcfa_mbar < FLOAT64(1.9) OR ppcff_mbar < FLOAT64(1.4) OR ppcf1_mbar < FLOAT64(0.8) OR ppcf2_mbar < FLOAT64(1.0) OR ppcfa_mbar > FLOAT64(3.0) OR ppcff_mbar > FLOAT64(2.1) OR ppcf1_mbar > FLOAT64(1.3) OR ppcf2_mbar > FLOAT64(1.6))) ON deviceid = pdeviceid WINDOW TUMBLING(ts, SIZE 600 ms) INTO q8Checksum;
+----
+11050, 25044178

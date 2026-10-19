@@ -1,0 +1,31 @@
+# name: demo/Edwithin.test
+# description: edwithin_tgeo_geo — true when a MovingPoint is ever within a given distance of a Polygon. Typed counterpart of the demo's tedwithin (Q3, Q4, Q8).
+# groups: [Demo, GeoTemporal, Meos]
+
+# Polygon is the 5x5 square (0,0)-(5,0)-(5,5)-(0,5). Points are placed at known distances:
+#   (2.5, 2.5) inside            -> distance 0
+#   (3.0, 5.1) 0.1 above the top -> distance 0.1
+#   (6.0, 2.5) 1.0 right of edge -> distance 1.0
+#   (0.0, 0.0) on the corner     -> distance 0
+CREATE LOGICAL SOURCE tInstantPoints(lon FLOAT64 NOT NULL, lat FLOAT64 NOT NULL, ts UINT64 NOT NULL, polygon Polygon NOT NULL);
+CREATE PHYSICAL SOURCE FOR tInstantPoints TYPE File SET('NestedJSON' AS `PARSER`.`TYPE`);
+ATTACH INLINE
+{"LON": 2.5, "LAT": 2.5, "TS": 100, "POLYGON": {"vertices": [{"x": 0, "y": 0}, {"x": 5, "y": 0}, {"x": 5, "y": 5}, {"x": 0, "y": 5}, {"x": 0, "y": 0}]}}
+{"LON": 3.0, "LAT": 5.1, "TS": 110, "POLYGON": {"vertices": [{"x": 0, "y": 0}, {"x": 5, "y": 0}, {"x": 5, "y": 5}, {"x": 0, "y": 5}, {"x": 0, "y": 0}]}}
+{"LON": 6.0, "LAT": 2.5, "TS": 120, "POLYGON": {"vertices": [{"x": 0, "y": 0}, {"x": 5, "y": 0}, {"x": 5, "y": 5}, {"x": 0, "y": 5}, {"x": 0, "y": 0}]}}
+{"LON": 0.0, "LAT": 0.0, "TS": 130, "POLYGON": {"vertices": [{"x": 0, "y": 0}, {"x": 5, "y": 0}, {"x": 5, "y": 5}, {"x": 0, "y": 5}, {"x": 0, "y": 0}]}}
+
+# dist 0.5 must admit the inside/corner points and the one 0.1 outside, but reject the one 1.0 away.
+SELECT lon, lat, ts FROM tInstantPoints WHERE edwithin_tgeo_geo(MovingPoint(lon, lat, ts), polygon, FLOAT64(0.5)) INTO FILE('CSV' as `SINK`.OUTPUT_FORMAT);
+----
+2.5,2.5,100
+3.0,5.1,110
+0.0,0.0,130
+
+# dist 2.0 must admit every point, including the one 1.0 away.
+SELECT lon, lat, ts FROM tInstantPoints WHERE edwithin_tgeo_geo(MovingPoint(lon, lat, ts), polygon, FLOAT64(2.0)) INTO FILE('CSV' as `SINK`.OUTPUT_FORMAT);
+----
+2.5,2.5,100
+3.0,5.1,110
+6.0,2.5,120
+0.0,0.0,130

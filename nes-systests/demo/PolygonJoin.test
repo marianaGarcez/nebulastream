@@ -1,0 +1,28 @@
+# name: demo/PolygonJoin.test
+# description: Regression test for the polygon-through-join defect. A variable-sized Polygon column carried into a join aborts the worker; projecting it away first works. Delete the workaround in Q3/Q4 once fixed.
+# groups: [Demo, Meos]
+
+CREATE LOGICAL SOURCE sncb_stream(ts UINT64 NOT NULL, deviceid UINT64 NOT NULL, vbat FLOAT64 NOT NULL, pcfa_mbar FLOAT64 NOT NULL, pcff_mbar FLOAT64 NOT NULL, pcf1_mbar FLOAT64 NOT NULL, pcf2_mbar FLOAT64 NOT NULL, t1_mbar FLOAT64 NOT NULL, t2_mbar FLOAT64 NOT NULL, code1 FLOAT64 NOT NULL, code2 FLOAT64 NOT NULL, gsp_speed FLOAT64 NOT NULL, gps_lat FLOAT64 NOT NULL, gps_lon FLOAT64 NOT NULL);
+CREATE PHYSICAL SOURCE FOR sncb_stream TYPE FILE;
+ATTACH FILE small/input_sncb.csv
+
+CREATE LOGICAL SOURCE highrisk_zone(ts UINT64 NOT NULL, zts UINT64 NOT NULL, hlon FLOAT64 NOT NULL, hlat FLOAT64 NOT NULL, polygon Polygon NOT NULL);
+CREATE PHYSICAL SOURCE FOR highrisk_zone TYPE File SET('NestedJSON' AS `PARSER`.`TYPE`);
+ATTACH INLINE
+{"TS": 1722520348, "ZTS": 1722520348, "HLON": 4.3658, "HLAT": 50.6456, "POLYGON": {"vertices": [{"x": 4.35, "y": 50.63}, {"x": 4.38, "y": 50.63}, {"x": 4.38, "y": 50.66}, {"x": 4.35, "y": 50.66}, {"x": 4.35, "y": 50.63}]}}
+{"TS": 1722520358, "ZTS": 1722520358, "HLON": 4.3658, "HLAT": 50.6456, "POLYGON": {"vertices": [{"x": 4.35, "y": 50.63}, {"x": 4.38, "y": 50.63}, {"x": 4.38, "y": 50.66}, {"x": 4.35, "y": 50.66}, {"x": 4.35, "y": 50.63}]}}
+
+# Control: the polygon works fine outside a join.
+SELECT ts, hlon, hlat FROM highrisk_zone WHERE edwithin_tgeo_geo(MovingPoint(hlon, hlat, ts), polygon, FLOAT64(0.01)) INTO FILE('CSV' as `SINK`.OUTPUT_FORMAT);
+----
+1722520348,4.3658,50.6456
+1722520358,4.3658,50.6456
+
+# Working form: the polygon is consumed by the predicate then projected away before the join.
+# Replacing the inner SELECT list with * aborts the worker.
+SELECT ts, deviceid, hlon FROM (SELECT * FROM sncb_stream) INNER JOIN (SELECT zts, hlon, hlat, ts FROM highrisk_zone WHERE edwithin_tgeo_geo(MovingPoint(hlon, hlat, ts), polygon, FLOAT64(0.01))) ON ts = zts WINDOW TUMBLING(ts, SIZE 100 ms) INTO FILE('CSV' as `SINK`.OUTPUT_FORMAT);
+----
+1722520348,3,4.3658
+1722520348,5,4.3658
+1722520358,3,4.3658
+1722520358,5,4.3658
